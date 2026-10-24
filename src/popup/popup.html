@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Local AI Anonymizer</title>
+  <link rel="stylesheet" href="../ui/theme.css">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header class="top">
+    <img src="../../icons/icon-32.png" alt="" width="22" height="22">
+    <h1>Anonymizer</h1>
+    <span id="model-status" class="pill">Checking model</span>
+    <span class="spacer"></span>
+    <label class="switch" title="Turn protection on or off everywhere">
+      <input type="checkbox" id="enabled">
+      <span class="track"></span>
+    </label>
+  </header>
+
+  <section id="site" class="site"></section>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" class="tab" data-tab="anonymize" aria-selected="true">Anonymize</button>
+    <button role="tab" class="tab" data-tab="restore" aria-selected="false">Restore</button>
+    <button role="tab" class="tab" data-tab="vault" aria-selected="false">Vault <span id="vault-count" class="count"></span></button>
+  </nav>
+
+  <main>
+    <section class="panel" data-panel="anonymize">
+      <label class="label" for="anon-input">Text to clean</label>
+      <textarea id="anon-input" placeholder="Paste an email, document or log here..."></textarea>
+      <div class="row">
+        <button id="anon-run">Anonymize</button>
+        <span id="anon-note" class="muted small"></span>
+      </div>
+      <div id="anon-result" class="result" hidden>
+        <div class="row">
+          <span class="label">Safe to share</span>
+          <span class="spacer"></span>
+          <button class="ghost small-btn" id="anon-copy">Copy</button>
+        </div>
+        <textarea id="anon-output" readonly></textarea>
+        <div id="anon-chips" class="chips"></div>
+      </div>
+    </section>
+
+    <section class="panel" data-panel="restore" hidden>
+      <label class="label" for="restore-input">AI reply with placeholders</label>
+      <textarea id="restore-input" placeholder="Paste the answer that mentions [PERSON_1], [EMAIL_1]..."></textarea>
+      <div class="row">
+        <button id="restore-run">Restore originals</button>
+        <span id="restore-note" class="muted small"></span>
+      </div>
+      <div id="restore-result" class="result" hidden>
+        <div class="row">
+          <span class="label">With real values</span>
+          <span class="spacer"></span>
+          <button class="ghost small-btn" id="restore-copy">Copy</button>
+        </div>
+        <textarea id="restore-output" readonly></textarea>
+      </div>
+    </section>
+
+    <section class="panel" data-panel="vault" hidden>
+      <p class="notice info">Placeholders and their real values. Kept in memory only and erased when you close the browser.</p>
+      <div id="vault-list" class="vault"></div>
+      <div class="row">
+        <span class="spacer"></span>
+        <button id="vault-clear" class="danger">Clear vault</button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <a href="#" id="open-options">Settings</a>
+    <span class="muted">Shortcut <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd></span>
+  </footer>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
