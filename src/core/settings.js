@@ -1,12 +1,17 @@
 // Settings schema, defaults and validation. Pure: no chrome.* calls.
 
 export const PATTERN_TYPES = Object.freeze([
-  'EMAIL', 'PHONE', 'CREDIT_CARD', 'SSN', 'IP_ADDRESS', 'IBAN', 'API_KEY', 'URL',
+  'EMAIL', 'PHONE', 'CREDIT_CARD', 'SSN', 'IP_ADDRESS', 'IBAN', 'API_KEY',
+  'DATE_OF_BIRTH', 'ID_NUMBER', 'ADDRESS', 'POSTCODE', 'URL',
 ]);
 
 export const MODEL_TYPES = Object.freeze([
   'PERSON', 'ORGANIZATION', 'ADDRESS', 'LOCATION', 'ID_NUMBER',
 ]);
+
+// What the bundled NER model can recognise. Addresses and ID numbers come
+// from the pattern rules, or from Ollama if the user switches to it.
+export const BUILTIN_MODEL_TYPES = Object.freeze(['PERSON', 'ORGANIZATION', 'LOCATION']);
 
 export const TYPE_LABELS = Object.freeze({
   EMAIL: 'Email addresses',
@@ -17,6 +22,8 @@ export const TYPE_LABELS = Object.freeze({
   IBAN: 'IBAN bank accounts',
   API_KEY: 'API keys, tokens, passwords',
   URL: 'URLs',
+  DATE_OF_BIRTH: 'Dates of birth (after "DOB", "born on")',
+  POSTCODE: 'UK postcodes, US state + ZIP',
   PERSON: 'People\'s names',
   ORGANIZATION: 'Companies and organizations',
   ADDRESS: 'Street addresses',
@@ -31,6 +38,7 @@ export const DEFAULT_SITES = Object.freeze([
 ]);
 
 export const PROVIDERS = Object.freeze({
+  builtin: { label: 'Built-in model (no install)', endpoint: null },
   ollama: { label: 'Ollama', endpoint: 'http://localhost:11434' },
   openai: { label: 'OpenAI-compatible (LM Studio, llama.cpp, vLLM)', endpoint: 'http://localhost:1234/v1' },
 });
@@ -45,14 +53,17 @@ const typeMap = (types, enabledByDefault) =>
 export const DEFAULT_SETTINGS = Object.freeze({
   enabled: true,
   interceptPaste: true,
+  restoreReplies: true,
   useModel: true,
-  provider: 'ollama',
+  provider: 'builtin',
   endpoint: PROVIDERS.ollama.endpoint,
   model: 'llama3.2',
   timeoutMs: 60000,
   onModelError: 'patterns',
   patternTypes: typeMap(PATTERN_TYPES, (t) => t !== 'URL'),
-  modelTypes: typeMap(MODEL_TYPES, (t) => t !== 'LOCATION'),
+  // Places on by default: the eval set went from 90% to 99% recall with no
+  // extra over-redaction (scripts/eval-ner.mjs --places).
+  modelTypes: typeMap(MODEL_TYPES, () => true),
   customSites: Object.freeze([]),
   disabledSites: Object.freeze([]),
 });
@@ -104,6 +115,7 @@ export function mergeSettings(stored) {
   return {
     enabled: pickBool(s.enabled, DEFAULT_SETTINGS.enabled),
     interceptPaste: pickBool(s.interceptPaste, DEFAULT_SETTINGS.interceptPaste),
+    restoreReplies: pickBool(s.restoreReplies, DEFAULT_SETTINGS.restoreReplies),
     useModel: pickBool(s.useModel, DEFAULT_SETTINGS.useModel),
     provider,
     endpoint: isHttpUrl(s.endpoint) ? s.endpoint.trim() : DEFAULT_SETTINGS.endpoint,

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Local AI Anonymizer",
   "short_name": "Anonymizer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Replaces names, emails, card numbers, keys and other sensitive data with placeholders before you paste into AI tools. Detection runs on a local model.",
   "minimum_chrome_version": "116",
   "icons": {
@@ -29,7 +29,8 @@
     "contextMenus",
     "declarativeNetRequest",
     "scripting",
-    "activeTab"
+    "activeTab",
+    "offscreen"
   ],
   "host_permissions": [
     "http://localhost/*",
@@ -57,6 +58,7 @@
         "https://poe.com/*"
       ],
       "js": [
+        "src/content/reveal.js",
         "src/content/content.js"
       ],
       "run_at": "document_start",
@@ -70,5 +72,8 @@
       },
       "description": "Anonymize the focused text box (or its selection)"
     }
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
   }
 }

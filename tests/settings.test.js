@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_SETTINGS, mergeSettings, isSiteEnabled, normalizeHost, isLocalEndpoint } from '../src/core/settings.js';
+import { DEFAULT_SETTINGS, mergeSettings, isSiteEnabled, normalizeHost, isLocalEndpoint, BUILTIN_MODEL_TYPES } from '../src/core/settings.js';
 
 test('mergeSettings fills missing values with defaults', () => {
   assert.deepEqual(mergeSettings(undefined), DEFAULT_SETTINGS);
@@ -53,4 +53,22 @@ test('isLocalEndpoint is not fooled by hostnames that start with 127.', () => {
   assert.equal(isLocalEndpoint('http://127.evil.com'), false);
   assert.equal(isLocalEndpoint('http://127.0.0.1.evil.com:11434'), false);
   assert.equal(isLocalEndpoint('https://localhost:8443'), true);
+});
+
+test('built-in model is the default provider and accepted from storage', () => {
+  assert.equal(DEFAULT_SETTINGS.provider, 'builtin');
+  assert.equal(mergeSettings({ provider: 'ollama' }).provider, 'ollama');
+  assert.equal(mergeSettings({ provider: 'builtin' }).provider, 'builtin');
+  assert.equal(DEFAULT_SETTINGS.restoreReplies, true);
+  assert.equal(mergeSettings({ restoreReplies: false }).restoreReplies, false);
+});
+
+test('new pattern types default on and old stored settings pick them up', () => {
+  const merged = mergeSettings({ patternTypes: { EMAIL: false } });
+  for (const t of ['DATE_OF_BIRTH', 'ID_NUMBER', 'ADDRESS', 'POSTCODE']) assert.equal(merged.patternTypes[t], true);
+  assert.equal(merged.patternTypes.EMAIL, false);
+});
+
+test('builtinTypes lists what the built-in model can find', () => {
+  assert.deepEqual(BUILTIN_MODEL_TYPES, ['PERSON', 'ORGANIZATION', 'LOCATION']);
 });

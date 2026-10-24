@@ -8,9 +8,9 @@ import { resolveSpans } from './spans.js';
 import { assignPlaceholders, PLACEHOLDER_RE } from './vault.js';
 import { enabledTypes } from './settings.js';
 
-export function applySpans(text, spans, vault) {
+export function applySpans(text, spans, vault, { site } = {}) {
   const resolved = resolveSpans(spans);
-  const { vault: nextVault, placeholders } = assignPlaceholders(vault, resolved);
+  const { vault: nextVault, placeholders } = assignPlaceholders(vault, resolved, { site });
   // Local buffer, joined once: linear even for pastes with thousands of hits.
   const parts = [];
   let cursor = 0;
@@ -58,7 +58,8 @@ async function modelSpans(text, settings, detectEntities) {
   return entitiesToSpans(text, entities).filter((s) => !insideAny(s, reserved));
 }
 
-export async function anonymize(text, { settings, vault, detectEntities }) {
+// `site` is the host the text is being pasted into (omit for extension pages).
+export async function anonymize(text, { settings, vault, detectEntities, site }) {
   if (!text) return { text, vault, replacements: [], warnings: [] };
 
   const patternSpans = detectPatterns(text, settings.patternTypes);
@@ -71,6 +72,6 @@ export async function anonymize(text, { settings, vault, detectEntities }) {
     warnings.push(`Local model unavailable, only patterns were used: ${err.message}`);
   }
 
-  const result = applySpans(text, [...patternSpans, ...fromModel], vault);
+  const result = applySpans(text, [...patternSpans, ...fromModel], vault, { site });
   return { ...result, warnings };
 }

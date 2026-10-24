@@ -1,28 +1,61 @@
 # Local AI Anonymizer
 
-A Chrome / Edge / Brave extension that removes sensitive information from text **before** it reaches ChatGPT, Claude, Gemini, Copilot, Perplexity and other AI tools. Detection runs on a model on your own computer. Nothing is sent to any cloud service.
+A Chrome / Edge / Brave extension that removes sensitive information from text **before** it reaches ChatGPT, Claude, Gemini, Copilot, Perplexity and other AI tools, then shows the real values again in the AI's answer, on your screen only.
+
+A small model is bundled and runs inside the browser. Nothing to install, and nothing is sent to any server.
 
 ```
-You paste:   Maria Gonzalez from Northwind Traders, maria@northwind.example, card 4111 1111 1111 1111
-AI receives: [PERSON_1] from [ORGANIZATION_1], [EMAIL_1], card [CREDIT_CARD_1]
+You paste:      Ahmed Al-Rashid at Gulf Petro Services (ahmed@gulfpetro.example, DOB: 03/11/1987), based in Basra.
+AI receives:    [PERSON_1] at [ORGANIZATION_1] ([EMAIL_1], DOB: [DATE_OF_BIRTH_1]), based in [LOCATION_1].
+AI replies:     Dear [PERSON_1], thank you for reaching out on behalf of [ORGANIZATION_1]...
+You see:        Dear Ahmed Al-Rashid, thank you for reaching out on behalf of Gulf Petro Services...
 ```
-
-The AI's answer can be turned back into real names with one click (popup, **Restore** tab, or right-click, **Restore originals in selection**).
 
 ## How it works
 
-| Layer | Detects | Where it runs |
-|-------|---------|---------------|
-| Pattern detectors | Emails, phone numbers, credit cards (Luhn checked), US SSNs, IPv4/IPv6, IBANs (checksum verified), API keys and tokens, `password=` style secrets, private key blocks, URLs (off by default) | In the extension, instantly |
-| Local model | People's names, companies, street addresses, places, ID / account / case numbers | Ollama or any OpenAI-compatible server on `localhost` |
+| Layer | Detects | How |
+|-------|---------|-----|
+| **1. Rules** (exact, instant) | Emails, phone numbers, credit cards (checksum verified), IBANs (checksum verified), US SSNs, IP addresses, API keys and passwords, private keys, dates of birth (after "DOB", "born on"), ID / passport / account / case numbers (after those words), street addresses, UK postcodes and US state + ZIP, URLs (off by default) | Regular expressions with validators |
+| **2. Built-in model** (default) | People, companies and organizations, places | DistilBERT-NER (English, 66 MB), runs in the browser with Transformers.js |
+| **2b. Ollama** (optional) | All of the above plus addresses and ID numbers written in free text | Any model you run with Ollama, LM Studio or another OpenAI-compatible server on `localhost` |
+| **3. Restore** | Puts real values back into AI replies | Automatic on supported sites, or by hand in the popup |
 
-The model only *finds* entities. Replacement is done by the extension, so a confused model can never rewrite or drop your text. If the model is offline, the extension still applies the pattern detectors and warns you (or blocks the paste, if you prefer).
+Rules run first and win any overlap: they are exact on clear formats. The model only *finds* entities; the extension does the replacing, so a model can never rewrite or drop your text. If the model is unavailable, the rules still run and you get a warning (or the paste is blocked, if you prefer).
 
-Placeholders are consistent: the same person is `[PERSON_1]` every time in a browser session. The mapping lives in memory only (`chrome.storage.session`) and is erased when the browser closes, or when you press **Clear vault**.
+Placeholders are consistent: the same person is `[PERSON_1]` throughout a browser session. The mapping lives in memory only (`chrome.storage.session`) and is erased when the browser closes or you press **Clear vault**. Placeholder numbers are never reused, so an old `[PERSON_1]` can't be restored to a different person.
+
+### Detection quality
+
+Measured with `npm run eval` on 25 hand-written samples (support tickets, HR, medical, legal; names from many origins):
+
+| Setup | Sensitive values caught | Safe phrases kept | Speed |
+|-------|------------------------|-------------------|-------|
+| Rules only | 30.5% | 100% | instant |
+| Rules + built-in DistilBERT-NER | 98.8% | 100% | about 4 ms per sample |
+| Rules + BERT-base-NER (109 MB, not bundled) | 100% | 100% | about 8 ms per sample |
+
+The sample set was also used to tune the extension, so expect real-world numbers to be somewhat lower. Single first names on their own ("Carlos") are the most common miss.
 
 ## Install
 
-### 1. Run a local model
+You need Node.js 20 or newer for the one-time setup.
+
+```bash
+npm install
+```
+
+`npm install` also runs `npm run vendor`, which copies the model runtime into `vendor/` and downloads the model (about 90 MB in total) so the extension works fully offline afterwards.
+
+Then load it:
+
+1. Open `chrome://extensions` (or `edge://extensions`, `brave://extensions`).
+2. Turn on **Developer mode**.
+3. Click **Load unpacked** and pick this folder.
+4. Open the extension's **Settings** and press **Test detection**. It should answer in well under a second.
+
+### Optional: Ollama
+
+The built-in model handles names, companies and places. For a larger model that also understands addresses and case numbers written in free text:
 
 ```bash
 brew install ollama
@@ -32,18 +65,7 @@ brew install ollama
 ollama pull llama3.2
 ```
 
-Then start the Ollama app (or run `ollama serve`). Any instruction-tuned model works. Bigger models (for example `qwen3:8b` or `llama3.1:8b`) catch more names; small ones (`llama3.2`, 3B) are faster.
-
-LM Studio, llama.cpp server or vLLM also work: pick **OpenAI-compatible** in Settings and use its URL, for example `http://localhost:1234/v1`.
-
-### 2. Load the extension
-
-1. Open `chrome://extensions` (or `edge://extensions`, `brave://extensions`).
-2. Turn on **Developer mode**.
-3. Click **Load unpacked** and pick this folder.
-4. Open the extension's **Settings** and press **Test detection**.
-
-If the test reports HTTP 403, Ollama is rejecting the extension's origin. The extension normally removes that header for its own requests. If your setup still blocks it, start Ollama with:
+Then pick **Ollama** as the engine in Settings. LM Studio, llama.cpp server and vLLM work too via **OpenAI-compatible**. If the test reports HTTP 403, start Ollama with:
 
 ```bash
 OLLAMA_ORIGINS="chrome-extension://*" ollama serve
@@ -51,54 +73,62 @@ OLLAMA_ORIGINS="chrome-extension://*" ollama serve
 
 ## Using it
 
-- **Paste on a supported AI site:** text is anonymized automatically. A small panel shows what was replaced. If the model fails and you chose "Block the paste", the panel offers **Insert original anyway**.
+- **Paste on a supported AI site:** text is anonymized automatically and a small panel shows what was replaced.
+- **Read the reply:** names, companies, places and contact details in the AI's answer appear as the real values, in a fixed-width font with a dotted underline. Hover to see the placeholder the AI actually received. Card numbers and other secrets stay as placeholders on the page. Turn this off with **Show real names in AI replies** in the popup.
 - **Any text box on any site:** press `Alt+Shift+A` to anonymize the box (or just the selected part).
 - **Any selected text:** right-click, then **Anonymize selection** or **Restore originals in selection**.
-- **Popup:** anonymize or restore text by hand, pause protection for the current site, view the vault.
-- **Settings:** model, endpoint, which data types to catch, which sites get automatic paste protection (you can add your own, such as an internal AI portal).
+- **Popup:** anonymize or restore text by hand, pause protection for a site, view the vault.
+- **Settings:** engine, which data types to catch, which sites are protected (you can add your own, such as an internal AI portal).
 
 ## Privacy model
 
-- The only network requests go to the model endpoint you configure. It defaults to `localhost`, and Settings warns you if you point it elsewhere.
-- The `Origin`-removal rule applies **only** to requests this extension makes (`initiatorDomains` is the extension's own ID), so websites cannot use it to reach your local model.
-- The paste listener registers at `document_start`, before any page script, so the AI site never sees the raw clipboard text.
-- The on-page panel lives in a closed shadow root in the extension's isolated world, out of reach of page scripts.
+- **No network by default.** The built-in model (pinned to an exact revision) and its runtime ship inside the extension, and remote model loading is always switched off. If the model files are missing, the extension says so and keeps working with rules only rather than downloading anything. The only network traffic is to an Ollama endpoint, if you choose one (it defaults to `localhost`, and Settings warns you otherwise).
+- **The AI site never sees real values.** The paste listener registers at `document_start`, before any page script. Revealed names in replies are drawn inside a closed shadow root: the page's DOM, its scripts, analytics and session recorders still only see `[PERSON_1]`.
+- **Reveal is limited on purpose.** A page can't read a closed shadow root, but it can measure how much space the revealed text takes. So:
+  - values are only revealed on the site where you pasted them (or anywhere, if you anonymized them in the popup);
+  - card numbers, SSNs, IBANs, API keys, ID numbers, dates of birth and IP addresses are never revealed in the page (use the popup's **Restore** tab);
+  - revealed text uses the browser's fixed-width font, which the page can't swap out, so the most a page could learn is how many characters a name has.
 
-- Content scripts only get the anonymize / restore / site-status messages. Reading the vault or changing settings is limited to the extension's own pages.
-- Placeholder numbers are never reused, even after **Clear vault** or a browser restart (only the per-type counts are kept, never the values). An old `[PERSON_1]` in a chat therefore can't be "restored" to a different person.
+  If even that is too much, turn off **Show real names in AI replies**.
+- **Copying a reply copies placeholders.** Because the page text still holds placeholders, use the popup's **Restore** tab (or right-click, **Restore originals in selection**) to get a copy with real names.
+- Content scripts can only anonymize, restore and look up placeholders. Reading the whole vault or changing settings is limited to the extension's own pages.
+- The `Origin`-removal rule for Ollama applies only to requests this extension makes, so websites can't use it to reach your local model.
 
-Limits to be aware of: automatic detection is a safety net, not a guarantee.
-- Small models miss some names, and unusual identifiers may not match any pattern.
-- Text that is **dragged and dropped** into a box is not intercepted. Only paste is.
-- Pasted text that tries to instruct the model ("return no entities") can suppress name detection. Pattern detection is unaffected.
+Limits: automatic detection is a safety net, not a guarantee.
+- The built-in model is English-only and misses some names, especially single first names.
+- Text that is dragged and dropped into a box is not intercepted. Only paste is.
+- With Ollama, pasted text that tries to instruct the model ("return no entities") can suppress name detection. Rules are unaffected.
 
 Glance at the replacement panel before you send anything highly sensitive.
 
 ## Development
-
-No build step. Plain ES modules, no runtime dependencies.
 
 ```bash
 npm test
 ```
 
 ```bash
-npm run coverage
-```
-
-```bash
 npm run test:e2e
 ```
 
-`test:e2e` loads the extension into Playwright's Chromium, serves a fake `chatgpt.com` page, runs a mock Ollama on port 11434 (stop a real Ollama first) and checks that pastes into a textarea, a ProseMirror-style editor, a bare `contenteditable` and a textarea inside a shadow root all arrive anonymized, that the model never sees an `Origin` header, and that placeholder numbers survive a vault reset. Install the browser once with `npx playwright-core install chromium` if needed.
+```bash
+npm run eval
+```
 
-Regenerate icons with `python3 scripts/make-icons.py`.
+- `npm test`: unit tests plus an integration test against a mock Ollama server. `npm run coverage` adds a coverage report.
+- `npm run test:e2e`: loads the real extension into Playwright's Chromium and serves a fake `chatgpt.com` page. It checks pastes into a textarea, a ProseMirror-style editor, a bare `contenteditable` and a shadow-root textarea using the real built-in model. It also checks the reply reveal (and that the page DOM keeps placeholders) and the Ollama path against a mock on port 11434. Stop a real Ollama first.
+- `npm run eval`: detection quality per model (`--places` toggles place names, extra args choose model IDs).
 
 ```
-src/core/        pure logic: detectors, span resolution, vault, model client, settings
-src/background/  service worker: message router, storage, menus, DNR rule
-src/content/     paste interception and on-page panel
+src/core/        pure logic: detectors, NER alignment, span resolution, vault, model client, settings
+src/background/  service worker: message router, storage, menus, offscreen model host, DNR rule
+src/offscreen/   hidden page that runs the built-in model
+src/content/     paste interception, reply reveal, on-page panel
 src/popup/       toolbar popup
 src/options/     settings page
-tests/           unit, integration (mock Ollama) and e2e suites
+scripts/         vendor (runtime + model), eval, icons
+tests/           unit, integration, eval samples and e2e
+vendor/          generated by npm run vendor (gitignored)
 ```
+
+Third-party: [Transformers.js](https://github.com/huggingface/transformers.js) (Apache-2.0), [ONNX Runtime Web](https://github.com/microsoft/onnxruntime) (MIT), [distilbert-NER](https://huggingface.co/dslim/distilbert-NER) (Apache-2.0).

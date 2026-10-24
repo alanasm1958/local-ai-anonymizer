@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createVault, assignPlaceholder, assignPlaceholders, lookupPlaceholder, vaultSize, isVault } from '../src/core/vault.js';
+import { createVault, assignPlaceholder, assignPlaceholders, lookupPlaceholder, lookupForSite, isRevealable, vaultSize, isVault } from '../src/core/vault.js';
 
 test('assigns numbered placeholders per type', () => {
   const v0 = createVault();
@@ -56,4 +56,28 @@ test('assignPlaceholders handles a batch with one copy', () => {
   ]);
   assert.deepEqual(placeholders, ['[PERSON_1]', '[PERSON_2]', '[PERSON_1]']);
   assert.equal(vaultSize(vault), 2);
+});
+
+test('assignPlaceholders records the site each value came from', () => {
+  const { vault: v1 } = assignPlaceholders(createVault(), [{ type: 'PERSON', value: 'Ana' }], { site: 'chatgpt.com' });
+  const { vault: v2 } = assignPlaceholders(v1, [{ type: 'PERSON', value: 'Ana' }], { site: 'claude.ai' });
+  assert.equal(lookupForSite(v2, '[PERSON_1]', 'chatgpt.com'), 'Ana');
+  assert.equal(lookupForSite(v2, '[PERSON_1]', 'claude.ai'), 'Ana');
+  assert.equal(lookupForSite(v1, '[PERSON_1]', 'claude.ai'), undefined);
+});
+
+test('values added from the extension itself are visible on any site', () => {
+  const { vault } = assignPlaceholders(createVault(), [{ type: 'PERSON', value: 'Ana' }]);
+  assert.equal(lookupForSite(vault, '[PERSON_1]', 'gemini.google.com'), 'Ana');
+});
+
+test('lookupForSite tolerates vaults saved before site tracking', () => {
+  const legacy = { byPlaceholder: { '[PERSON_1]': 'Ana' }, byKey: {}, counters: { PERSON: 1 } };
+  assert.equal(isVault(legacy), true);
+  assert.equal(lookupForSite(legacy, '[PERSON_1]', 'chatgpt.com'), undefined);
+});
+
+test('isRevealable allows names and contact details but not secrets', () => {
+  for (const p of ['[PERSON_1]', '[ORGANIZATION_2]', '[LOCATION_1]', '[EMAIL_1]', '[PHONE_3]', '[ADDRESS_1]']) assert.equal(isRevealable(p), true, p);
+  for (const p of ['[CREDIT_CARD_1]', '[SSN_1]', '[IBAN_1]', '[API_KEY_1]', '[ID_NUMBER_1]', '[DATE_OF_BIRTH_1]', '[IP_ADDRESS_1]']) assert.equal(isRevealable(p), false, p);
 });

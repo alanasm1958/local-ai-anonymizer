@@ -108,3 +108,9 @@ test('restoreText reports placeholders the vault does not know', () => {
   const restored = restoreText('[PERSON_3] and [EMAIL_1]', createVault());
   assert.equal(restored.unknownCount, 2);
 });
+
+test('anonymize records the site the text was pasted into', async () => {
+  const detectEntities = async () => [{ text: 'Jane', type: 'PERSON' }];
+  const result = await anonymize('Jane', { settings: DEFAULT_SETTINGS, vault: createVault(), detectEntities, site: 'claude.ai' });
+  assert.deepEqual(result.vault.sites, { '[PERSON_1]': ['claude.ai'] });
+});

@@ -46,3 +46,13 @@ kbd { font-family: var(--mono); font-size: 11px; padding: 1px 4px; border: 1px s
 @media (max-width: 620px) {
   .grid, .types { grid-template-columns: 1fr; }
 }
+
+#model-card[data-engine="builtin"] .external { display: none !important; }
+#model-card:not([data-engine="builtin"]) .builtin-only { display: none !important; }
+.status-line { padding: 8px 0; font-weight: 600; }
+.status-line.ok { color: var(--ok); }
+.status-line.warn { color: var(--warn); }
+.status-line.bad { color: var(--danger); }
+.toggles { display: grid; gap: 8px; justify-items: end; }
+.needs-ollama { font-size: 11px; color: var(--muted); font-weight: 400; }
+@media (max-width: 620px) { .toggles { justify-items: start; } }

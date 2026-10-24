@@ -5,23 +5,34 @@ let settings = null;
 
 // ---------- header: master switch and model status ----------
 
-async function renderModelStatus() {
-  const pill = $('#model-status');
-  if (!settings.useModel) {
-    pill.className = 'pill warn';
-    pill.textContent = 'Patterns only';
-    return;
+const STATUS_POLL_MS = 1000;
+const STATUS_POLL_LIMIT = 60;
+
+function describeStatus(status) {
+  const name = settings.provider === 'builtin' ? 'Built-in model' : status.label;
+  switch (status.state) {
+    case 'ready': return { tone: 'ok', text: name, title: `${status.label} is ready` };
+    case 'off': return { tone: 'warn', text: 'Patterns only', title: 'Model detection is turned off in Settings' };
+    case 'loading': return { tone: 'warn', text: status.progress < 100 ? `Loading ${status.progress}%` : 'Loading model', title: status.label };
+    case 'missing': return { tone: 'warn', text: `${status.label} not installed`, title: `Installed: ${status.models?.join(', ') || 'none'}` };
+    default: return { tone: 'bad', text: 'Model offline', title: status.error ?? 'Unknown error' };
   }
+}
+
+async function renderModelStatus(attempt = 0) {
+  const pill = $('#model-status');
+  let status;
   try {
-    const models = await call('listModels');
-    const installed = models.some((m) => m === settings.model || m.split(':')[0] === settings.model);
-    pill.className = installed ? 'pill ok' : 'pill warn';
-    pill.textContent = installed ? settings.model : `${settings.model} not installed`;
-    pill.title = installed ? 'Local model is ready' : `Installed: ${models.join(', ') || 'none'}`;
+    status = await call('modelStatus');
   } catch (err) {
-    pill.className = 'pill bad';
-    pill.textContent = 'Model offline';
-    pill.title = err.message;
+    status = { state: 'error', error: err.message };
+  }
+  const { tone, text, title } = describeStatus(status);
+  pill.className = `pill ${tone}`;
+  pill.textContent = text;
+  pill.title = title;
+  if ((status.state === 'loading' || status.state === 'idle') && attempt < STATUS_POLL_LIMIT) {
+    setTimeout(() => renderModelStatus(attempt + 1), STATUS_POLL_MS);
   }
 }
 
@@ -164,12 +175,16 @@ function openOptions(event) {
 async function init() {
   settings = await call('getSettings');
   $('#enabled').checked = settings.enabled;
+  $('#restoreReplies').checked = settings.restoreReplies;
   await loadCurrentHost();
   renderSite();
   renderModelStatus();
   refreshVaultCount();
 
   $('#enabled').addEventListener('change', onToggleEnabled);
+  $('#restoreReplies').addEventListener('change', async (e) => {
+    settings = await call('saveSettings', { patch: { restoreReplies: e.target.checked } });
+  });
   document.querySelectorAll('.tab').forEach((tab) => tab.addEventListener('click', () => selectTab(tab.dataset.tab)));
   $('#anon-run').addEventListener('click', runAnonymize);
   $('#restore-run').addEventListener('click', runRestore);

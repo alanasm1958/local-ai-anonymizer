@@ -10,8 +10,13 @@
   const SUCCESS_TOAST_MS = 7000;
   const MAX_LISTED = 6;
 
-  const state = { active: false, interceptPaste: false };
+  const state = { active: false, interceptPaste: false, restoreReplies: false };
   let dispatchingSyntheticPaste = false;
+
+  // reveal.js is injected first into the same isolated world.
+  const revealer = globalThis.__anonymizerReveal?.createRevealer({
+    lookup: (placeholders) => send('lookup', { placeholders }),
+  });
 
   // ---------- messaging ----------
 
@@ -32,9 +37,12 @@
       const status = await send('siteStatus', { hostname: location.hostname });
       state.active = status.active;
       state.interceptPaste = status.interceptPaste;
+      state.restoreReplies = status.restoreReplies;
     } catch {
       state.active = false;
     }
+    if (state.active && state.restoreReplies) revealer?.start();
+    else revealer?.stop();
   }
 
   // ---------- editable targets ----------
@@ -350,6 +358,7 @@
       return false;
     }
     if (message?.type === 'runAction') runAction(message);
+    if (message?.type === 'vaultCleared') revealer?.reset();
     return false;
   });
 

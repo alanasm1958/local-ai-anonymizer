@@ -1,8 +1,12 @@
 import { call, $, h, withBusy } from '../ui/api.js';
 import {
-  PROVIDERS, PATTERN_TYPES, MODEL_TYPES, TYPE_LABELS, DEFAULT_SITES,
+  PROVIDERS, PATTERN_TYPES, MODEL_TYPES, TYPE_LABELS, DEFAULT_SITES, BUILTIN_MODEL_TYPES,
   isLocalEndpoint, normalizeHost,
 } from '../core/settings.js';
+import { BUILTIN_MODEL } from '../core/ner.js';
+
+const STATUS_POLL_MS = 1000;
+const STATUS_POLL_LIMIT = 120;
 
 let settings = null;
 let savedTimer = null;
@@ -30,19 +34,51 @@ function renderModelSection() {
   $('#model').value = settings.model;
   $('#timeout').value = String(Math.round(settings.timeoutMs / 1000));
   $('#useModel').checked = settings.useModel;
+  $('#builtin-name').textContent = `${BUILTIN_MODEL.label}, ${BUILTIN_MODEL.sizeMb} MB`;
   document.querySelectorAll('input[name="onModelError"]').forEach((r) => { r.checked = r.value === settings.onModelError; });
+  $('#model-card').dataset.engine = settings.provider;
   updateEndpointWarning();
+  if (settings.provider === 'builtin') renderBuiltinStatus();
 }
 
+const isBuiltinSelected = () => $('#provider').value === 'builtin';
+
 function updateEndpointWarning() {
-  $('#endpoint-warning').hidden = isLocalEndpoint($('#endpoint').value);
+  $('#endpoint-warning').hidden = isBuiltinSelected() || isLocalEndpoint($('#endpoint').value);
 }
 
 function onProviderChange() {
   const provider = $('#provider').value;
-  const knownDefaults = Object.values(PROVIDERS).map((p) => p.endpoint);
-  if (knownDefaults.includes($('#endpoint').value)) $('#endpoint').value = PROVIDERS[provider].endpoint;
+  $('#model-card').dataset.engine = provider;
+  const knownDefaults = Object.values(PROVIDERS).map((p) => p.endpoint).filter(Boolean);
+  if (PROVIDERS[provider].endpoint && knownDefaults.includes($('#endpoint').value)) {
+    $('#endpoint').value = PROVIDERS[provider].endpoint;
+  }
   updateEndpointWarning();
+}
+
+const BUILTIN_STATUS_TEXT = Object.freeze({
+  ready: ['ok', 'Ready, running on this device'],
+  loading: ['warn', 'Loading...'],
+  idle: ['warn', 'Starting...'],
+  off: ['warn', 'Model detection is off: patterns only'],
+});
+
+async function renderBuiltinStatus(attempt = 0) {
+  const line = $('#builtin-status');
+  let status;
+  try {
+    status = await call('modelStatus');
+  } catch (err) {
+    status = { state: 'error', error: err.message };
+  }
+  const [tone, text] = BUILTIN_STATUS_TEXT[status.state] ?? ['bad', `Error: ${status.error ?? 'unknown'}`];
+  const progress = status.state === 'loading' && status.progress < 100 ? ` ${status.progress}%` : '';
+  line.className = `status-line ${tone}`;
+  line.textContent = `${text}${progress}`;
+  if ((status.state === 'loading' || status.state === 'idle') && attempt < STATUS_POLL_LIMIT) {
+    setTimeout(() => renderBuiltinStatus(attempt + 1), STATUS_POLL_MS);
+  }
 }
 
 // Endpoints outside the manifest's localhost permissions (LAN hosts, [::1],
@@ -55,6 +91,13 @@ async function ensureEndpointPermission(endpoint) {
 }
 
 async function saveModelSettings() {
+  const onModelError = document.querySelector('input[name="onModelError"]:checked')?.value;
+  if (isBuiltinSelected()) {
+    await save({ provider: 'builtin', onModelError });
+    renderModelSection();
+    renderModelTypes();
+    return true;
+  }
   const endpoint = $('#endpoint').value.trim();
   try {
     new URL(endpoint);
@@ -72,9 +115,10 @@ async function saveModelSettings() {
     endpoint,
     model: $('#model').value.trim(),
     timeoutMs: Number.isFinite(seconds) ? seconds * 1000 : settings.timeoutMs,
-    onModelError: document.querySelector('input[name="onModelError"]:checked')?.value,
+    onModelError,
   });
   renderModelSection();
+  renderModelTypes();
   return true;
 }
 
@@ -115,15 +159,23 @@ async function testModel() {
 
 // ---------- types section ----------
 
-function renderTypeChecks(container, types, key) {
+function renderTypeChecks(container, types, key, note = () => null) {
   container.replaceChildren(...types.map((type) => {
     const input = h('input', {
       type: 'checkbox',
       checked: settings[key][type],
       onchange: (e) => save({ [key]: { ...settings[key], [type]: e.target.checked } }),
     });
-    return h('label', {}, input, TYPE_LABELS[type], h('span', { class: 'chip' }, `[${type}_1]`));
+    return h('label', {}, input, TYPE_LABELS[type], note(type), h('span', { class: 'chip' }, `[${type}_1]`));
   }));
+}
+
+// The built-in model only knows people, organizations and places.
+function renderModelTypes() {
+  const needsOllama = (type) => (settings.provider === 'builtin' && !BUILTIN_MODEL_TYPES.includes(type)
+    ? h('span', { class: 'needs-ollama' }, '(Ollama only)')
+    : null);
+  renderTypeChecks($('#model-types'), MODEL_TYPES, 'modelTypes', needsOllama);
 }
 
 // ---------- sites section ----------
@@ -182,8 +234,9 @@ async function init() {
   settings = await call('getSettings');
   renderModelSection();
   renderTypeChecks($('#pattern-types'), PATTERN_TYPES, 'patternTypes');
-  renderTypeChecks($('#model-types'), MODEL_TYPES, 'modelTypes');
+  renderModelTypes();
   $('#interceptPaste').checked = settings.interceptPaste;
+  $('#restoreReplies').checked = settings.restoreReplies;
   renderDefaultSites();
   renderCustomSites();
 
@@ -191,6 +244,7 @@ async function init() {
   $('#endpoint').addEventListener('input', updateEndpointWarning);
   $('#useModel').addEventListener('change', (e) => save({ useModel: e.target.checked }));
   $('#interceptPaste').addEventListener('change', (e) => save({ interceptPaste: e.target.checked }));
+  $('#restoreReplies').addEventListener('change', (e) => save({ restoreReplies: e.target.checked }));
   $('#save-model').addEventListener('click', saveModelSettings);
   $('#test-model').addEventListener('click', testModel);
   $('#refresh-models').addEventListener('click', refreshModels);

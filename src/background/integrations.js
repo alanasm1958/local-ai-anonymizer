@@ -5,11 +5,9 @@ import { vaultSize } from '../core/vault.js';
 
 const ORIGIN_RULE_ID = 1;
 const CUSTOM_SCRIPT_ID = 'custom-sites';
-const CONTENT_SCRIPT = 'src/content/content.js';
+// reveal.js must load first: content.js picks it up from the shared isolated world.
+const CONTENT_SCRIPTS = ['src/content/reveal.js', 'src/content/content.js'];
 
-// Ollama rejects chrome-extension:// origins unless OLLAMA_ORIGINS is set.
-// Removing the header only for requests this extension starts keeps web
-// pages from abusing the same rule to reach the local model.
 // Settings can be saved from several pages at once and the worker also syncs
 // on startup; chaining keeps unregister/register pairs from interleaving.
 let syncQueue = Promise.resolve();
@@ -22,6 +20,9 @@ const serialized = (task) => {
 export const syncOriginRule = (settings) => serialized(() => applyOriginRule(settings));
 export const syncCustomSites = (settings) => serialized(() => applyCustomSites(settings));
 
+// Ollama rejects chrome-extension:// origins unless OLLAMA_ORIGINS is set.
+// Removing the header only for requests this extension starts keeps web
+// pages from abusing the same rule to reach the local model.
 async function applyOriginRule(settings) {
   let hostname;
   try {
@@ -66,7 +67,7 @@ async function applyCustomSites(settings) {
   await chrome.scripting.registerContentScripts([{
     id: CUSTOM_SCRIPT_ID,
     matches: hosts.flatMap(patternsFor),
-    js: [CONTENT_SCRIPT],
+    js: CONTENT_SCRIPTS,
     runAt: 'document_start',
     allFrames: true,
     persistAcrossSessions: true,
@@ -85,6 +86,6 @@ export async function ensureContentScript(tabId, frameId = 0) {
   try {
     await chrome.tabs.sendMessage(tabId, { type: 'ping' }, { frameId });
   } catch {
-    await chrome.scripting.executeScript({ target: { tabId, frameIds: [frameId] }, files: [CONTENT_SCRIPT] });
+    await chrome.scripting.executeScript({ target: { tabId, frameIds: [frameId] }, files: CONTENT_SCRIPTS });
   }
 }

@@ -4,8 +4,8 @@ const SOURCE_RANK = Object.freeze({ pattern: 0, model: 1 });
 
 // When two pattern spans cover the same text, the more specific type wins.
 const TYPE_RANK = Object.freeze([
-  'API_KEY', 'EMAIL', 'URL', 'IBAN', 'CREDIT_CARD', 'SSN', 'IP_ADDRESS', 'PHONE',
-  'ID_NUMBER', 'ADDRESS', 'PERSON', 'ORGANIZATION', 'LOCATION',
+  'API_KEY', 'EMAIL', 'URL', 'IBAN', 'CREDIT_CARD', 'SSN', 'DATE_OF_BIRTH', 'ID_NUMBER',
+  'IP_ADDRESS', 'PHONE', 'ADDRESS', 'POSTCODE', 'PERSON', 'ORGANIZATION', 'LOCATION',
 ]);
 
 const typeRank = (type) => {

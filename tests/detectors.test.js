@@ -126,7 +126,71 @@ test('secrets with prefixed keys and JSON style are detected', () => {
 test('pathological 200k inputs finish quickly (no ReDoS)', () => {
   for (const input of ['a.'.repeat(100000), '12-'.repeat(66000), `a@${'b.'.repeat(100000)}`, 'a-'.repeat(100000)]) {
     const started = Date.now();
-    detectPatterns(input, ALL);
+    detectPatterns(input, { ...ALL, ...EXTRA });
     assert.ok(Date.now() - started < 1500, `took ${Date.now() - started}ms on ${input.slice(0, 6)}...`);
+  }
+});
+
+const EXTRA = { DATE_OF_BIRTH: true, ID_NUMBER: true, ADDRESS: true, POSTCODE: true };
+
+test('detects dates of birth only next to a DOB keyword', () => {
+  assert.deepEqual(values('DOB: 14/05/1990', EXTRA), [['DATE_OF_BIRTH', '14/05/1990']]);
+  assert.deepEqual(values('Date of birth 1990-05-14.', EXTRA), [['DATE_OF_BIRTH', '1990-05-14']]);
+  assert.deepEqual(values('born on 14 May 1990', EXTRA), [['DATE_OF_BIRTH', '14 May 1990']]);
+  assert.deepEqual(values('Birthday: March 3, 1985', EXTRA), [['DATE_OF_BIRTH', 'March 3, 1985']]);
+  assert.deepEqual(values('The meeting is on 14/05/2026', EXTRA), []);
+});
+
+test('detects ID numbers after a keyword and requires a digit', () => {
+  assert.deepEqual(values('Passport No. X1234567', EXTRA), [['ID_NUMBER', 'X1234567']]);
+  assert.deepEqual(values('Account #: 00123-4567', EXTRA), [['ID_NUMBER', '00123-4567']]);
+  assert.deepEqual(values('case number CR-2024-00917 filed', EXTRA), [['ID_NUMBER', 'CR-2024-00917']]);
+  assert.deepEqual(values('Employee ID: EMP4471', EXTRA), [['ID_NUMBER', 'EMP4471']]);
+  assert.deepEqual(values('MRN 88231907', EXTRA), [['ID_NUMBER', '88231907']]);
+  assert.deepEqual(values('the account manager', EXTRA), []);
+  assert.deepEqual(values('Reference: pending', EXTRA), []);
+});
+
+test('detects common street addresses', () => {
+  assert.deepEqual(values('Ship to 221B Baker Street, London', EXTRA), [['ADDRESS', '221B Baker Street']]);
+  assert.deepEqual(values('at 1600 Pennsylvania Ave NW today', EXTRA), [['ADDRESS', '1600 Pennsylvania Ave NW']]);
+  assert.deepEqual(values('Office: 42 Old Mill Rd.', EXTRA), [['ADDRESS', '42 Old Mill Rd']]);
+  assert.deepEqual(values('We sold 3 Big Ideas today', EXTRA), []);
+});
+
+test('detects UK postcodes and US state plus ZIP', () => {
+  assert.deepEqual(values('London NW1 6XE', EXTRA), [['POSTCODE', 'NW1 6XE']]);
+  assert.deepEqual(values('Springfield, IL 62704-1234', EXTRA), [['POSTCODE', 'IL 62704-1234']]);
+  assert.deepEqual(values('Order 62704 shipped', EXTRA), []);
+});
+
+test('ID numbers ignore lowercase words that merely contain digits', () => {
+  for (const s of ['the client server2 is down', 'reference python3', 'ref: node18-alpine', 'license apache-2.0',
+    'ticket sprint-42', 'claim form2023a', 'Our staff handbook2024']) {
+    assert.deepEqual(values(s, EXTRA), [], s);
+  }
+});
+
+test('postcodes need a real UK area and are not storage sizes', () => {
+  for (const s of ['AWS S3 5GB bucket', 'EC2 4GB instance', 'MP3 5MB file', 'a 1TB drive at SE1 2TB']) {
+    assert.equal(values(s, EXTRA).some(([, v]) => /GB|MB|TB/.test(v)), false, s);
+  }
+  assert.deepEqual(values('Leeds LS1 4AP', EXTRA), [['POSTCODE', 'LS1 4AP']]);
+  assert.deepEqual(values('Write to SW1A 1AA', EXTRA), [['POSTCODE', 'SW1A 1AA']]);
+});
+
+test('ambiguous street suffixes need a following town', () => {
+  for (const s of ['2 Google Drive accounts', 'Windows 11 Home Court', 'Step 3 Open File Place', '2023 Visual Studio Way']) {
+    assert.deepEqual(values(s, EXTRA), [], s);
+  }
+  assert.deepEqual(values('Lives at 1842 Willow Creek Drive, Austin', EXTRA), [['ADDRESS', '1842 Willow Creek Drive']]);
+  assert.deepEqual(values('7 Harbour Way, Bristol', EXTRA), [['ADDRESS', '7 Harbour Way']]);
+});
+
+test('keyword gaps cannot be stretched into quadratic backtracking', () => {
+  for (const input of [`id${' '.repeat(100000)}x`, `born${' '.repeat(100000)}x`, `1${' '.repeat(100000)}x`, `Passport No.${' '.repeat(100000)}x`]) {
+    const started = Date.now();
+    detectPatterns(input, { ...ALL, ...EXTRA });
+    assert.ok(Date.now() - started < 500, `took ${Date.now() - started}ms on ${input.slice(0, 8)}...`);
   }
 });

@@ -44,6 +44,43 @@ function phoneValid(candidate) {
   return hasFormatting || digits.length >= 10;
 }
 
+const MONTH = '(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\\.?';
+const DATE = [
+  '\\d{4}-\\d{1,2}-\\d{1,2}',
+  '\\d{1,2}[/.-]\\d{1,2}[/.-]\\d{2,4}',
+  `\\d{1,2}(?:st|nd|rd|th)?\\s+${MONTH},?\\s+\\d{4}`,
+  `${MONTH}\\s+\\d{1,2}(?:st|nd|rd|th)?,?\\s+\\d{4}`,
+].join('|');
+
+const US_STATES = [
+  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA', 'KS',
+  'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC',
+  'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY',
+].join('|');
+
+// The 121 UK postcode areas. Checking the area rejects look-alikes such as
+// "MP3 5MB"; inward codes never use C, I, K, M, O or V.
+const UK_AREAS = [
+  'AB', 'AL', 'BA', 'BB', 'BD', 'BH', 'BL', 'BN', 'BR', 'BS', 'BT', 'B', 'CA', 'CB', 'CF', 'CH', 'CM',
+  'CO', 'CR', 'CT', 'CV', 'CW', 'DA', 'DD', 'DE', 'DG', 'DH', 'DL', 'DN', 'DT', 'DY', 'EC', 'EH', 'EN',
+  'EX', 'E', 'FK', 'FY', 'GL', 'GU', 'GY', 'G', 'HA', 'HD', 'HG', 'HP', 'HR', 'HS', 'HU', 'HX', 'IG',
+  'IM', 'IP', 'IV', 'JE', 'KA', 'KT', 'KW', 'KY', 'LA', 'LD', 'LE', 'LL', 'LN', 'LS', 'LU', 'L', 'ME',
+  'MK', 'ML', 'M', 'NE', 'NG', 'NN', 'NP', 'NR', 'NW', 'N', 'OL', 'OX', 'PA', 'PE', 'PH', 'PL', 'PO',
+  'PR', 'RG', 'RH', 'RM', 'SA', 'SE', 'SG', 'SK', 'SL', 'SM', 'SN', 'SO', 'SP', 'SR', 'SS', 'ST', 'SW',
+  'SY', 'S', 'TA', 'TD', 'TF', 'TN', 'TQ', 'TR', 'TS', 'TW', 'UB', 'WA', 'WC', 'WD', 'WF', 'WN', 'WR',
+  'WS', 'WV', 'W', 'YO', 'ZE',
+].join('|');
+
+// "5GB", "1TB": storage sizes that happen to fit the inward-code shape.
+const notStorageSize = (value) => !/\d(?:GB|TB|PB)$/.test(value);
+
+// Keyword-gated IDs must look like IDs: no lowercase, at least one digit.
+// The regex is case-insensitive for the keyword only.
+const looksLikeId = (value) => /^[A-Z0-9-]+$/.test(value) && /\d/.test(value);
+
+const STREET_WORDS = '(?:[A-Z][a-z]+\\.?[ \\t]{1,3}){1,4}';
+const COMPASS = '(?:[ \\t](?:NW|NE|SW|SE|N|S|E|W)\\b)?';
+
 const DETECTORS = Object.freeze([
   {
     type: 'API_KEY',
@@ -61,7 +98,7 @@ const DETECTORS = Object.freeze([
   {
     // Prefix lets DB_PASSWORD / AWS_SECRET_ACCESS_KEY match; bounded to stay linear.
     type: 'API_KEY',
-    regex: /\b[A-Za-z0-9_-]{0,40}?(?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|client[_-]?secret)["']?\s*[:=]\s*["']?([^\s"',}]{6,})/gid,
+    regex: /\b[A-Za-z0-9_-]{0,40}?(?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|client[_-]?secret)["']?[ \t]{0,3}[:=][ \t]{0,3}["']?([^\s"',}]{6,})/gid,
     group: 1,
     requires: /[:=]/,
   },
@@ -90,6 +127,39 @@ const DETECTORS = Object.freeze([
   {
     type: 'SSN',
     regex: /\b(?!000|666|9\d\d)\d{3}-(?!00)\d{2}-(?!0000)\d{4}\b/gd,
+  },
+  {
+    // Only right after a birth keyword, so ordinary dates are left alone.
+    type: 'DATE_OF_BIRTH',
+    regex: new RegExp(`\\b(?:DOB|D\\.O\\.B\\.?|date of birth|birth ?date|born(?: on)?|birthday)(?![a-z])[ \\t:.-]{0,5}(${DATE})`, 'gid'),
+    group: 1,
+  },
+  {
+    // Keyword-gated so "the account manager" is not touched. Gaps are bounded:
+    // two adjacent unbounded \s runs backtrack quadratically on long spaces.
+    type: 'ID_NUMBER',
+    regex: /\b(?:passport|account|acct|customer|client|member|employee|staff|student|patient|policy|case|claim|invoice|ticket|reference|ref|licen[cs]e|MRN|NHS|national id|ID)(?:[ \t]{1,3}(?:no\.?|number|num|#|id))?[ \t]{0,3}[:#.]?[ \t]{0,3}([A-Z0-9][A-Z0-9-]{3,24}[A-Z0-9])\b/gid,
+    group: 1,
+    validate: looksLikeId,
+  },
+  {
+    type: 'ADDRESS',
+    regex: new RegExp(`\\b\\d{1,5}[A-Z]?[ \\t]{1,3}${STREET_WORDS}(?:Street|St|Avenue|Ave|Road|Rd|Lane|Ln|Boulevard|Blvd|Terrace|Crescent|Parkway|Pkwy|Highway|Hwy)\\b${COMPASS}`, 'gd'),
+  },
+  {
+    // "Drive", "Way", "Court"... are also product and software words
+    // ("2 Google Drive accounts"), so these need a town after a comma.
+    type: 'ADDRESS',
+    regex: new RegExp(`\\b\\d{1,5}[A-Z]?[ \\t]{1,3}${STREET_WORDS}(?:Drive|Dr|Way|Court|Ct|Place|Pl|Close|Square|Sq)\\b${COMPASS}(?=,[ \\t]{0,3}[A-Z][a-z])`, 'gd'),
+  },
+  {
+    type: 'POSTCODE',
+    regex: new RegExp(`\\b(?:(?:${UK_AREAS})\\d[A-Z\\d]?|GIR) ?\\d[ABD-HJLNP-UW-Z]{2}\\b`, 'gd'),
+    validate: notStorageSize,
+  },
+  {
+    type: 'POSTCODE',
+    regex: new RegExp(`\\b(?:${US_STATES})\\s+\\d{5}(?:-\\d{4})?\\b`, 'gd'),
   },
   {
     type: 'IP_ADDRESS',
@@ -150,7 +220,10 @@ export function detectPatterns(text, enabledTypes) {
   return dropContained(spans);
 }
 
-const PRIORITY_ORDER = ['API_KEY', 'EMAIL', 'URL', 'IBAN', 'CREDIT_CARD', 'SSN', 'IP_ADDRESS', 'PHONE'];
+const PRIORITY_ORDER = [
+  'API_KEY', 'EMAIL', 'URL', 'IBAN', 'CREDIT_CARD', 'SSN', 'DATE_OF_BIRTH', 'ID_NUMBER',
+  'ADDRESS', 'POSTCODE', 'IP_ADDRESS', 'PHONE',
+];
 const PRIORITY = (type) => PRIORITY_ORDER.indexOf(type);
 
 const byStartThenWidest = (a, b) =>
