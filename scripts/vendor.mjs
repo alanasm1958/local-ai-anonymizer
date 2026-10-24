@@ -17,6 +17,9 @@ const COPIES = [
   ['@huggingface/transformers/LICENSE', 'transformers/LICENSE'],
   ['onnxruntime-web/dist/ort-wasm-simd-threaded.asyncify.mjs', 'ort/ort-wasm-simd-threaded.asyncify.mjs'],
   ['onnxruntime-web/dist/ort-wasm-simd-threaded.asyncify.wasm', 'ort/ort-wasm-simd-threaded.asyncify.wasm'],
+  // Zip reader/writer for .docx/.xlsx/.pptx files (MIT).
+  ['fflate/esm/browser.js', 'fflate/fflate.js'],
+  ['fflate/LICENSE', 'fflate/LICENSE'],
 ];
 
 

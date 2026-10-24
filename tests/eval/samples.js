@@ -128,4 +128,42 @@ export const SAMPLES = [
     sensitive: ['22 July 1979', 'Daniel Ortega-Ruiz', 'POL-883920', 'Allianz'],
     keep: [],
   },
+  // Prompts that open with a command word: the model is least sure here.
+  {
+    text: 'Call Priya Raman at Tata Consultancy Services about the renewal.',
+    sensitive: ['Priya Raman', 'Tata Consultancy Services'],
+    keep: ['about the renewal'],
+  },
+  {
+    text: 'Call Priya Raman at Tata Consultancy Services on +91 98450 12345 about passport no. B7731902.',
+    sensitive: ['Priya Raman', 'Tata Consultancy Services', '+91 98450 12345', 'B7731902'],
+    keep: [],
+  },
+  {
+    text: 'Email Daniel Okoro the signed contract today.',
+    sensitive: ['Daniel Okoro'],
+    keep: ['signed contract'],
+  },
+  {
+    text: 'Ask Mei Lin whether the audit is finished.',
+    sensitive: ['Mei Lin'],
+    keep: ['audit is finished'],
+  },
+  {
+    text: 'Tell Javier Morales that the shipment left Rotterdam on Tuesday.',
+    sensitive: ['Javier Morales', 'Rotterdam'],
+    keep: ['shipment', 'Tuesday'],
+  },
+  {
+    text: 'Remind Fatou Diallo to submit her visa form.',
+    sensitive: ['Fatou Diallo'],
+    keep: ['visa form'],
+  },
+  // Name-free prompts that start the same way: nothing should be replaced.
+  { text: 'Call the vendor tomorrow and confirm the delivery window.', sensitive: [], keep: ['Call the vendor', 'delivery window'] },
+  { text: 'Email the finance team the updated budget spreadsheet.', sensitive: [], keep: ['Email the finance team', 'budget spreadsheet'] },
+  { text: 'Review this pull request and summarize the main risks.', sensitive: [], keep: ['Review this pull request', 'main risks'] },
+  { text: 'Translate the onboarding guide into Spanish and French.', sensitive: [], keep: ['onboarding guide', 'Spanish', 'French'] },
+  { text: 'Write a cover letter for a project manager role in healthcare.', sensitive: [], keep: ['cover letter', 'project manager', 'healthcare'] },
+  { text: 'Summarize the meeting notes and list action items by owner.', sensitive: [], keep: ['meeting notes', 'action items'] },
 ];

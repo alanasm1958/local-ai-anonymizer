@@ -41,6 +41,8 @@
       <div class="row">
         <button id="anon-run">Anonymize</button>
         <span id="anon-note" class="muted small"></span>
+        <span class="spacer"></span>
+        <a href="#" class="small file-link" data-files="clean">Clean a file&hellip;</a>
       </div>
       <div id="anon-result" class="result" hidden>
         <div class="row">
@@ -59,6 +61,8 @@
       <div class="row">
         <button id="restore-run">Restore originals</button>
         <span id="restore-note" class="muted small"></span>
+        <span class="spacer"></span>
+        <a href="#" class="small file-link" data-files="restore">Restore a file&hellip;</a>
       </div>
       <div id="restore-result" class="result" hidden>
         <div class="row">
@@ -71,6 +75,7 @@
     </section>
 
     <section class="panel" data-panel="vault" hidden>
+      <div id="tally" class="tally" hidden></div>
       <p class="notice info">Placeholders and their real values. Kept in memory only and erased when you close the browser.</p>
       <div id="vault-list" class="vault"></div>
       <div class="row">

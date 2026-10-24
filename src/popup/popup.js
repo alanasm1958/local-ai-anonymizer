@@ -1,5 +1,6 @@
 import { call, $, h, copyText, withBusy } from '../ui/api.js';
 import { DEFAULT_SITES, isSiteEnabled, normalizeHost } from '../core/settings.js';
+import { describeCount } from '../core/report.js';
 
 let settings = null;
 
@@ -113,8 +114,9 @@ async function runAnonymize() {
     $('#anon-output').value = result.text;
     $('#anon-result').hidden = false;
     renderChips(result.replacements);
-    const count = new Set(result.replacements.map((r) => r.placeholder)).size;
-    note.textContent = result.warnings[0] ?? `${count} item${count === 1 ? '' : 's'} replaced`;
+    const { items, breakdown } = result.summary;
+    const replaced = items ? `${items} item${items === 1 ? '' : 's'} replaced: ${breakdown}` : 'Nothing sensitive found';
+    note.textContent = result.warnings[0] ?? replaced;
     note.className = result.warnings.length ? 'small warn-text' : 'muted small';
     refreshVaultCount();
   } catch (err) {
@@ -149,7 +151,29 @@ async function refreshVaultCount() {
   return entries;
 }
 
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+// Session summary: what was protected, by type and by site.
+async function renderTally() {
+  const box = $('#tally');
+  const tally = await call('getTally');
+  box.hidden = tally.items === 0;
+  if (tally.items === 0) return;
+  const mentions = tally.mentions > tally.items ? `, ${plural(tally.mentions, 'mention')}` : '';
+  box.replaceChildren(
+    h('div', { class: 'tally-head' }, `${plural(tally.items, 'item')} protected this session `,
+      h('span', {}, `(${plural(tally.runs, 'run')}${mentions})`)),
+    h('div', { class: 'tally-types' }, tally.byType.map((t) => h('span', {}, describeCount(t)))),
+    tally.bySite.length
+      ? h('div', { class: 'tally-sites' }, 'By site: ', tally.bySite.flatMap((s, i) => [
+        i ? ' · ' : '', h('strong', {}, s.site), ` ${s.items}`,
+      ]))
+      : null,
+  );
+}
+
 async function renderVault() {
+  renderTally();
   const entries = await refreshVaultCount();
   const list = $('#vault-list');
   if (!entries.length) {
@@ -192,6 +216,11 @@ async function init() {
   $('#restore-copy').addEventListener('click', (e) => copyText(e.target, $('#restore-output').value));
   $('#vault-clear').addEventListener('click', clearVault);
   $('#open-options').addEventListener('click', openOptions);
+  // A popup closes when a file picker opens, so files get their own page.
+  document.querySelectorAll('.file-link').forEach((link) => link.addEventListener('click', (e) => {
+    e.preventDefault();
+    chrome.tabs.create({ url: chrome.runtime.getURL(`src/files/files.html#${link.dataset.files}`) });
+  }));
   $('#anon-input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) runAnonymize();
   });

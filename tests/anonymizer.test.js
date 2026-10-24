@@ -205,3 +205,11 @@ test('known values are only matched when model detection is on', async () => {
   const second = await anonymize('Northwind Traders again', { settings: off, vault: first.vault, detectEntities: detectList([]) });
   assert.equal(second.text, 'Northwind Traders again');
 });
+
+test('organizations with a company suffix are caught even when the model misses them', async () => {
+  const result = await anonymize('Northwind Traders paid on time.', { settings: DEFAULT_SETTINGS, vault: createVault(), detectEntities: async () => [] });
+  assert.equal(result.text, '[ORGANIZATION_1] paid on time.');
+  const off = { ...DEFAULT_SETTINGS, modelTypes: { ...DEFAULT_SETTINGS.modelTypes, ORGANIZATION: false } };
+  const kept = await anonymize('Northwind Traders paid on time.', { settings: off, vault: createVault(), detectEntities: async () => [] });
+  assert.equal(kept.text, 'Northwind Traders paid on time.');
+});

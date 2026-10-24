@@ -1,12 +1,16 @@
 // Message router. Every reply uses the envelope { ok, data?, error? }.
 
-import { anonymize, restoreText } from '../core/anonymizer.js';
+import { anonymize, restoreText, placeholderSpans } from '../core/anonymizer.js';
 import { createModelClient } from '../core/llm.js';
 import { isSiteEnabled, enabledTypes, normalizeHost } from '../core/settings.js';
 import { vaultEntries, lookupForSite, isRevealable, ANY_SITE } from '../core/vault.js';
 import {
-  getSettings, saveSettings, getVault, setVault, clearVault, withVaultLock, keepAlive,
+  getSettings, saveSettings, getVault, setVault, clearVault, withVaultLock, keepAlive, getStats, setStats,
 } from './state.js';
+import { summarizeReplacements, formatBreakdown, recordRun, sessionTally } from '../core/report.js';
+import { anonymizeFile, restoreFile, MAX_FILE_BYTES } from '../core/files.js';
+import { bytesToBase64, base64ToBytes } from '../core/base64.js';
+import * as fflate from '../../vendor/fflate/fflate.js';
 import { syncOriginRule, syncCustomSites, updateBadge, ensureContentScript } from './integrations.js';
 import { builtinClient, builtinStatus, warmUpBuiltin, closeOffscreen } from './builtin.js';
 import { BUILTIN_MODEL } from '../core/ner.js';
@@ -73,8 +77,74 @@ async function handleAnonymize({ text }, sender) {
     });
     await setVault(result.vault);
     await updateBadge(result.vault);
-    return { text: result.text, replacements: result.replacements, warnings: result.warnings };
+    const summary = summarizeReplacements(result.replacements);
+    await setStats(recordRun(await getStats(), summary));
+    return {
+      text: result.text,
+      replacements: result.replacements,
+      warnings: result.warnings,
+      summary: { ...summary, breakdown: formatBreakdown(summary.byType) },
+    };
   }));
+}
+
+// ---------- files ----------
+
+// The MIME type travels as `mime`: `type` is the message's handler name.
+function requireFile({ name, mime, data }) {
+  if (typeof name !== 'string' || typeof data !== 'string') throw new Error('Expected a file');
+  if (data.length > Math.ceil(MAX_FILE_BYTES / 3) * 4 + 4) throw new Error('The file is too large to check');
+  return { name, type: typeof mime === 'string' ? mime : '', bytes: base64ToBytes(data) };
+}
+
+const fileReply = (result, summary, warnings = []) => ({
+  status: result.status,
+  reason: result.reason ?? null,
+  name: result.name,
+  mime: result.type,
+  // Bytes travel back only when they changed.
+  data: result.status === 'cleaned' || result.status === 'restored' ? bytesToBase64(result.bytes) : null,
+  // Model problems first: a file checked by rules only must say so.
+  notes: [...warnings, ...result.notes],
+  summary: summary ? { ...summary, breakdown: formatBreakdown(summary.byType) } : null,
+});
+
+// One vault lock for the whole file, so every part of a document shares
+// placeholders and nothing else interleaves.
+async function handleAnonymizeFile(message, sender) {
+  const file = requireFile(message);
+  const settings = await getSettings();
+  const client = clientFor(settings);
+  const site = siteOf(sender);
+  return withVaultLock(() => keepAlive(async () => {
+    let vault = await getVault();
+    const warnings = new Set();
+    const anonymizeText = async (text) => {
+      const result = await anonymize(text, { settings, vault, detectEntities: client.detectEntities, site });
+      vault = result.vault;
+      result.warnings.forEach((w) => warnings.add(w));
+      return result;
+    };
+    const result = await anonymizeFile(file, { anonymizeText, zip: fflate });
+    await setVault(vault);
+    await updateBadge(vault);
+    const summary = summarizeReplacements(result.replacements);
+    await setStats(recordRun(await getStats(), summary));
+    return fileReply(result, summary, [...warnings]);
+  }));
+}
+
+async function handleRestoreFile(message) {
+  const file = requireFile(message);
+  const vault = await getVault();
+  const result = await restoreFile(file, { restoreSpans: (text) => placeholderSpans(text, vault), zip: fflate });
+  return fileReply(result, null);
+}
+
+// Vault tab: what this session has protected, by type and by site.
+async function handleGetTally() {
+  const tally = sessionTally(await getVault(), await getStats());
+  return { ...tally, breakdown: formatBreakdown(tally.byType) };
 }
 
 async function handleRestore({ text }) {
@@ -98,6 +168,8 @@ async function handleSiteStatus({ hostname }) {
     active: isSiteEnabled(settings, hostname),
     interceptPaste: settings.interceptPaste,
     restoreReplies: settings.restoreReplies,
+    checkFiles: settings.checkFiles,
+    holdUncheckedFiles: settings.holdUncheckedFiles,
   };
 }
 
@@ -146,6 +218,7 @@ const CONTENT_HANDLERS = Object.freeze({
   restore: handleRestore,
   siteStatus: handleSiteStatus,
   lookup: handleLookup,
+  anonymizeFile: handleAnonymizeFile,
 });
 
 const PAGE_HANDLERS = Object.freeze({
@@ -157,6 +230,8 @@ const PAGE_HANDLERS = Object.freeze({
   getSettings: () => getSettings(),
   saveSettings: handleSaveSettings,
   getVault: async () => vaultEntries(await getVault()),
+  getTally: handleGetTally,
+  restoreFile: handleRestoreFile,
   clearVault: handleClearVault,
 });
 

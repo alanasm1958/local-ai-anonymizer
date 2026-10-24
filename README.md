@@ -87,6 +87,13 @@ OLLAMA_ORIGINS="chrome-extension://*" ollama serve
   - sites that accept a paste anywhere on the page and route it into their message box.
 
   Password, number and date fields are left alone. Moving text around inside the message box is not intercepted.
+- **Attach files:** files you pick, drag or paste into a protected AI site are cleaned before the site receives them:
+  - text and code files, CSV and JSON;
+  - Word (`.docx`), Excel (`.xlsx`) and PowerPoint (`.pptx`), with formatting kept and author names removed.
+
+  PDFs, images and other formats can't be checked, so they are held and you choose whether to upload them anyway (switchable in Settings). Each file's panel says what was replaced and what wasn't checked (for example images inside a document, or Excel cells stored as numbers).
+- **Clean or restore a file by hand:** popup, **Clean a file…** or **Restore a file…**. The page cleans any supported file for use elsewhere, or puts the real values back into a file an AI produced, then offers it as a download.
+- **See what was protected:** each paste reports what it replaced, by type ("5 names, 3 emails, 2 phone numbers"). The popup shows the same after a manual anonymize. The **Vault** tab keeps a running tally for the session, by type and by site, erased with the vault.
 - **People are kept consistent:** once "Maria Gonzalez" is `[PERSON_1]`, a later "Maria" or "Gonzalez" on its own (in the same paste or a later one this session) also becomes `[PERSON_1]`. Restoring it shows the full name. Common-word names like "Will" or "May" are not matched on their own.
 - **Read the reply:** names, companies, places and contact details in the AI's answer appear as the real values, in a fixed-width font with a dotted underline. Hover to see the placeholder the AI actually received. Card numbers and other secrets stay as placeholders on the page. Turn this off with **Show real names in AI replies** in the popup.
 - **Any text box on any site:** press `Alt+Shift+A` to anonymize the box (or just the selected part).
@@ -114,7 +121,11 @@ Real keyboard pastes (logged out, nothing sent) leave no sensitive value in the 
 
 Limits: automatic detection is a safety net, not a guarantee.
 - The built-in model is English-only and misses some names, especially single first names.
-- Typing sensitive data by hand is not checked; only paste, drag-and-drop and the `Alt+Shift+A` shortcut are. Use the shortcut after typing.
+- Typing sensitive data by hand is not checked; only paste, drag-and-drop, file uploads and the `Alt+Shift+A` shortcut are. Use the shortcut after typing.
+- Text inside PDFs and images is not read. Those files are held so you can decide, not cleaned.
+- Uploads made through the browser's newer file-picker API (rather than a regular file button) are not intercepted.
+- Inside Office files, the following are cleaned: text, tables, headers and footers, comments, tracked deletions, field codes, link targets, slide notes, pivot-table caches and author metadata. The preview thumbnail is replaced with a blank image. Not checked (the panel lists whatever applies): images, charts, embedded files, custom XML data, Excel table column names, sheet names and formulas, and numbers stored as numbers.
+- File names are cleaned when they contain a capital letter, with spaces, `_` or `-` between words ("Maria_Gonzalez_CV.docx"). Run-together names ("MariaGonzalez.txt") are not.
 - With Ollama, pasted text that tries to instruct the model ("return no entities") can suppress name detection. Rules are unaffected.
 
 Glance at the replacement panel before you send anything highly sensitive.
@@ -137,26 +148,34 @@ npm run eval
 npm run lint
 ```
 
+```bash
+npm run store-assets
+```
+
 - `npm test`: unit tests plus an integration test against a mock Ollama server. `npm run coverage` adds a coverage report.
 - `npm run test:e2e`: loads the real extension into Playwright's Chromium and serves a fake `chatgpt.com` page, using the real built-in model. It covers:
   - pastes into a textarea, a ProseMirror-style editor, a bare `contenteditable`, a shadow-root textarea and the page background;
   - drag-and-drop, the shortcut and the right-click restore;
   - the reply reveal, including that the page DOM keeps placeholders and that values don't cross sites;
-  - the Ollama path, against a mock on port 11434 (stop a real Ollama first).
+  - the per-type reports in the panel, popup and Vault tab;
+  - the Ollama path, against a mock on port 11434 (stop a real Ollama first);
+  - that the extension makes no outbound requests: the browser is routed through a recording proxy, and any host other than Chrome's own services fails the test.
 
   Set `EXTENSION_PATH` to run it against an unzipped release package.
 - `npm run package`: builds the release zip in `dist/`.
+- `npm run store-assets`: regenerates the Chrome Web Store screenshots and promo images in `store/images/`. Everything else needed for the store submission is in `store/`, starting with `store/SUBMISSION.md`.
 - `npm run eval`: detection quality per model (`--places` toggles place names, extra args choose model IDs).
 
 ```
-src/core/        pure logic: detectors, NER alignment, span resolution, vault, model client, settings
+src/core/        pure logic: detectors, NER alignment, org rule, span resolution, vault, files (text/JSON/Office), reports, model client, settings
 src/background/  service worker: message router, storage, menus, offscreen model host, DNR rule
 src/offscreen/   hidden page that runs the built-in model
-src/content/     paste and drop interception, reply reveal, on-page panel
+src/content/     paste, drop and upload interception, reply reveal, on-page panel
+src/files/       page to clean or restore files by hand
 src/popup/       toolbar popup
 src/options/     settings page
 scripts/         vendor (runtime + model), package, eval, icons
-tests/           unit, integration, eval samples and e2e
+tests/           unit, integration, eval samples, real Office fixtures and e2e
 vendor/          generated by npm run vendor (gitignored)
 ```
 

@@ -6,11 +6,14 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from 'playwright-core';
+import { unzipSync, strFromU8 } from 'fflate';
+import { extractOoxmlText } from '../../src/core/ooxml.js';
 import { startMockOllama } from '../helpers/mock-ollama.js';
+import { startRecordingProxy } from '../helpers/recording-proxy.js';
 
 // EXTENSION_PATH lets the suite run against an unzipped release package.
 const EXTENSION_PATH = process.env.EXTENSION_PATH ?? fileURLToPath(new URL('../../', import.meta.url));
@@ -25,6 +28,7 @@ const FAKE_CHAT_PAGE = `<!doctype html><html><body>
   <chat-box id="shadow-host"></chat-box>
   <div id="reply"></div>
   <input id="pw" type="password">
+  <input id="upload" type="file" multiple>
   <script>
     customElements.define('chat-box', class extends HTMLElement {
       constructor() { super(); this.attachShadow({ mode: 'open' }).innerHTML = '<textarea id="inner"></textarea>'; }
@@ -45,6 +49,27 @@ const FAKE_CHAT_PAGE = `<!doctype html><html><body>
       if (text.includes('Maria Gonzalez')) window.pageSawRawPaste = true;
       e.currentTarget.textContent += text;
     });
+    // What the site receives when files are uploaded, dropped or pasted.
+    const readFiles = (files) => Promise.all([...files].map(async (f) => ({
+      name: f.name, type: f.type, b64: btoa(String.fromCharCode(...new Uint8Array(await f.arrayBuffer()))),
+    })));
+    document.getElementById('upload').addEventListener('change', async (e) => { window.uploaded = await readFiles(e.target.files); });
+    document.addEventListener('drop', async (e) => {
+      if (!e.dataTransfer.files.length) return;
+      e.preventDefault();
+      window.dropped = await readFiles(e.dataTransfer.files);
+    });
+    document.addEventListener('paste', async (e) => {
+      if (e.clipboardData.files.length) window.pastedFiles = await readFiles(e.clipboardData.files);
+    });
+    window.fireFile = (kind, name, text, targetId = 'bare', extra = {}) => {
+      const data = new DataTransfer();
+      data.items.add(new File([text], name, { type: extra.mime ?? 'text/plain' }));
+      if (extra.html !== undefined) data.setData('text/html', extra.html);
+      const init = { bubbles: true, cancelable: true, composed: true };
+      const target = document.getElementById(targetId);
+      target.dispatchEvent(kind === 'drop' ? new DragEvent('drop', { ...init, dataTransfer: data }) : new ClipboardEvent('paste', { ...init, clipboardData: data }));
+    };
     // A chat reply rendered by the page, and a React-style in-place update.
     window.showReply = (text) => { document.getElementById('reply').textContent = text; };
     window.rewriteReply = (text) => { document.getElementById('reply').firstChild.nodeValue = text; };
@@ -85,6 +110,7 @@ const FAKE_CHAT_PAGE = `<!doctype html><html><body>
 const SECRET_TEXT = 'Maria Gonzalez from Northwind Traders, maria@northwind.example, card 4111 1111 1111 1111';
 
 let ollama;
+let proxy;
 let context;
 let userDataDir;
 let worker;
@@ -93,9 +119,15 @@ before(async () => {
   // rejectOrigin proves the declarativeNetRequest rule strips the header.
   ollama = await startMockOllama({ port: OLLAMA_PORT, host: '::', rejectOrigin: true });
   userDataDir = await mkdtemp(join(tmpdir(), 'anonymizer-e2e-'));
+  // Every outbound request goes through a proxy that records and refuses it.
+  // Fake AI pages are served by context.route before the network; the mock
+  // Ollama is on localhost, which bypasses the proxy.
+  proxy = await startRecordingProxy();
   context = await chromium.launchPersistentContext(userDataDir, {
     channel: 'chromium',
     headless: true,
+    // Explicit bypass: Playwright otherwise forces loopback through the proxy.
+    proxy: { server: proxy.url, bypass: 'localhost,127.0.0.1,[::1]' },
     args: [`--disable-extensions-except=${EXTENSION_PATH}`, `--load-extension=${EXTENSION_PATH}`],
   });
   worker = context.serviceWorkers()[0] ?? await context.waitForEvent('serviceworker');
@@ -107,6 +139,7 @@ before(async () => {
 after(async () => {
   await context?.close();
   await ollama?.close();
+  await proxy?.close();
   if (userDataDir) await rm(userDataDir, { recursive: true, force: true });
 });
 
@@ -266,6 +299,93 @@ test('paste into a password field is left to the browser', async () => {
   await page.close();
 });
 
+const decoded = (entry) => Buffer.from(entry.b64, 'base64');
+
+test('a text file picked with the file picker is cleaned before the site reads it', async () => {
+  const page = await openChat();
+  await page.setInputFiles('#upload', { name: 'Maria_Gonzalez_notes.txt', mimeType: 'text/plain', buffer: Buffer.from(SECRET_TEXT) });
+  await page.waitForFunction(() => window.uploaded, null, { timeout: 30000 });
+  const [received] = await page.evaluate(() => window.uploaded);
+  assertClean(decoded(received).toString('utf8'));
+  assert.match(received.name, /^\[PERSON_\d+\]_notes\.txt$/);
+  assert.match(await visibleText(page), /Cleaned 1 file/);
+  await page.close();
+});
+
+test('a real Word document is cleaned before the site reads it', async () => {
+  const page = await openChat();
+  await page.setInputFiles('#upload', fileURLToPath(new URL('../fixtures/python-docx.docx', import.meta.url)));
+  await page.waitForFunction(() => window.uploaded, null, { timeout: 30000 });
+  const [received] = await page.evaluate(() => window.uploaded);
+  const parts = unzipSync(new Uint8Array(decoded(received)));
+  const xml = Object.entries(parts).filter(([p]) => p.endsWith('.xml')).map(([, b]) => strFromU8(b)).join(' ');
+  for (const value of ['Maria', 'Gonzalez', 'maria.gonzalez', '7946 0958', '4111 1111', 'Northwind Traders']) {
+    assert.ok(!xml.includes(value), `${value} reached the site`);
+  }
+  await page.close();
+});
+
+test('a PDF is held: the site receives nothing until the user decides', async () => {
+  const page = await openChat();
+  await page.setInputFiles('#upload', { name: 'scan.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 Maria Gonzalez') });
+  await page.waitForTimeout(1500);
+  assert.equal(await page.evaluate(() => window.uploaded), undefined);
+  assert.equal(await page.evaluate(() => document.getElementById('upload').files.length), 0, 'the input was emptied');
+  assert.match(await visibleText(page), /can't be checked/);
+  await page.close();
+});
+
+test('dropped and pasted files are cleaned before the site sees them', async () => {
+  const page = await openChat();
+  await page.evaluate((t) => window.fireFile('drop', 'dropped.txt', t), SECRET_TEXT);
+  await page.waitForFunction(() => window.dropped, null, { timeout: 30000 });
+  assertClean(decoded((await page.evaluate(() => window.dropped))[0]).toString('utf8'));
+  await page.evaluate((t) => window.fireFile('paste', 'pasted.csv', t), SECRET_TEXT);
+  await page.waitForFunction(() => window.pastedFiles, null, { timeout: 30000 });
+  assertClean(decoded((await page.evaluate(() => window.pastedFiles))[0]).toString('utf8'));
+  await page.close();
+});
+
+async function downloadFrom(page) {
+  await page.waitForSelector('.result a.button', { timeout: 30000 });
+  const [download] = await Promise.all([page.waitForEvent('download'), page.click('.result a.button')]);
+  return { name: download.suggestedFilename(), bytes: new Uint8Array(await readFile(await download.path())) };
+}
+
+test('files page: clean a Word document, then restore the downloaded copy', async () => {
+  const page = await context.newPage();
+  await page.goto(extensionUrl('src/files/files.html#clean'));
+  await page.setInputFiles('#file-input', fileURLToPath(new URL('../fixtures/python-docx.docx', import.meta.url)));
+  const cleaned = await downloadFrom(page);
+  const cleanedXml = strFromU8(unzipSync(cleaned.bytes)['word/document.xml']);
+  assert.ok(!cleanedXml.includes('Maria') && !cleanedXml.includes('Northwind'), 'cleaned download still has names');
+  assert.match(await page.textContent('.result'), /Cleaned.*name/s);
+
+  await page.click('[data-mode="restore"]');
+  await page.setInputFiles('#file-input', { name: cleaned.name, mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', buffer: Buffer.from(cleaned.bytes) });
+  const restored = await downloadFrom(page);
+  const text = extractOoxmlText(strFromU8(unzipSync(restored.bytes)['word/document.xml']), 'w:t', ['w:p']);
+  assert.match(text, /Please call Maria Gonzalez at maria\.gonzalez@northwind\.example/);
+  await page.close();
+});
+
+test('a file dropped straight onto a file-upload box is cleaned', async () => {
+  const page = await openChat();
+  await page.evaluate((t) => window.fireFile('drop', 'onto-input.txt', t, 'upload'), SECRET_TEXT);
+  await page.waitForFunction(() => window.dropped, null, { timeout: 30000 });
+  assertClean(decoded((await page.evaluate(() => window.dropped))[0]).toString('utf8'));
+  await page.close();
+});
+
+test('a "Copy image" paste (image plus empty HTML) is held, not passed through', async () => {
+  const page = await openChat();
+  await page.evaluate(() => window.fireFile('paste', 'image.png', 'PNG-bytes', 'bare', { mime: 'image/png', html: '<img src="https://example.org/a.png">' }));
+  await page.waitForTimeout(1500);
+  assert.equal(await page.evaluate(() => window.pastedFiles), undefined);
+  assert.match(await visibleText(page), /can't be checked/);
+  await page.close();
+});
+
 test('built-in model is the default and loads from the bundled files', async () => {
   const reply = await sendFromExtensionPage({ type: 'modelStatus' });
   assert.equal(reply.data.state, 'ready');
@@ -378,6 +498,31 @@ test('reply reveal is limited to the site the value was pasted on, and skips sec
   await other.close();
 });
 
+test('the panel, popup and Vault tab report what was protected, by type', async () => {
+  const page = await openChat();
+  await page.evaluate((t) => window.firePaste('plain', t), SECRET_TEXT);
+  await page.waitForFunction(() => /\[PERSON_\d+\]/.test(document.getElementById('plain').value), null, { timeout: 30000 });
+  await page.waitForTimeout(300);
+  assert.match(await visibleText(page), /1 name, 1 organization, 1 email, 1 card number/);
+  await page.close();
+
+  const popup = await context.newPage();
+  await popup.goto(extensionUrl('src/popup/popup.html'));
+  await popup.fill('#anon-input', 'Ask Hannah Becker or Tom Ruiz, hannah@example.org');
+  await popup.click('#anon-run');
+  await popup.waitForSelector('#anon-result:not([hidden])');
+  assert.match(await popup.textContent('#anon-note'), /^3 items replaced: 2 names, 1 email$/);
+
+  await popup.click('[data-tab="vault"]');
+  await popup.waitForSelector('#tally:not([hidden])');
+  const tally = await popup.textContent('#tally');
+  assert.match(tally, /items protected this session/);
+  assert.match(tally, /\d+ names/);
+  assert.match(tally, /By site: .*chatgpt\.com \d+/);
+  assert.match(tally, /Popup \d+/);
+  await popup.close();
+});
+
 test('Ollama engine: requests reach the local server without an Origin header', async () => {
   await patchSettings({ provider: 'ollama' });
   const page = await openChat();
@@ -398,4 +543,14 @@ test('pasting on a site the user paused leaves text untouched', async () => {
   await page.waitForTimeout(500);
   assert.equal(await page.textContent('#rich'), SECRET_TEXT);
   await page.close();
+});
+
+test('the extension makes no outbound network requests', () => {
+  // A proxy can't tell who asked, so allow only what is known not to be the
+  // extension: Chrome's own background services, and the connection Chrome
+  // opens to the fake AI sites before context.route serves them. Any other
+  // host (a model hub, a CDN, an analytics endpoint) fails the test.
+  const BROWSER_OR_TEST = /(^|\.)(google\.com|googleapis\.com|gstatic\.com|chatgpt\.com|claude\.ai)(:\d+)?$/;
+  const unexpected = [...new Set(proxy.hosts)].filter((host) => !BROWSER_OR_TEST.test(host));
+  assert.deepEqual(unexpected, [], `unexpected outbound hosts: ${unexpected.join(', ')}`);
 });

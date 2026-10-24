@@ -237,6 +237,8 @@ async function init() {
   renderModelTypes();
   $('#interceptPaste').checked = settings.interceptPaste;
   $('#restoreReplies').checked = settings.restoreReplies;
+  $('#checkFiles').checked = settings.checkFiles;
+  $('#holdUncheckedFiles').checked = settings.holdUncheckedFiles;
   renderDefaultSites();
   renderCustomSites();
 
@@ -245,6 +247,8 @@ async function init() {
   $('#useModel').addEventListener('change', (e) => save({ useModel: e.target.checked }));
   $('#interceptPaste').addEventListener('change', (e) => save({ interceptPaste: e.target.checked }));
   $('#restoreReplies').addEventListener('change', (e) => save({ restoreReplies: e.target.checked }));
+  $('#checkFiles').addEventListener('change', (e) => save({ checkFiles: e.target.checked }));
+  $('#holdUncheckedFiles').addEventListener('change', (e) => save({ holdUncheckedFiles: e.target.checked }));
   $('#save-model').addEventListener('click', saveModelSettings);
   $('#test-model').addEventListener('click', testModel);
   $('#refresh-models').addEventListener('click', refreshModels);

@@ -8,6 +8,7 @@ import { resolveSpans } from './spans.js';
 import { assignPlaceholders, PLACEHOLDER_RE } from './vault.js';
 import { enabledTypes } from './settings.js';
 import { nameAliasSpans, partOwners } from './names.js';
+import { orgSuffixSpans } from './orgs.js';
 import { NEVER_ENTITIES } from './ner.js';
 
 const MIN_KNOWN_LENGTH = 3;
@@ -28,10 +29,19 @@ export function applySpans(text, spans, vault, { site } = {}) {
   return {
     text: parts.join(''),
     vault: nextVault,
+    // start/end are offsets in the original text (used to rewrite Office files).
     replacements: resolved.map((span, i) => ({
-      placeholder: placeholders[i], type: span.type, original: span.value, source: span.source,
+      placeholder: placeholders[i], type: span.type, original: span.value, source: span.source, start: span.start, end: span.end,
     })),
   };
+}
+
+// Known placeholders in `text` with their real values, for restoring files
+// where the text is spread across several XML elements.
+export function placeholderSpans(text, vault) {
+  return [...text.matchAll(PLACEHOLDER_RE)]
+    .filter((m) => vault.byPlaceholder[m[0]] !== undefined)
+    .map((m) => ({ start: m.index, end: m.index + m[0].length, text: vault.byPlaceholder[m[0]] }));
 }
 
 export function restoreText(text, vault) {
@@ -83,7 +93,9 @@ function entitySpans(text, settings, vault, found) {
   // a new person: let the alias span (full name's placeholder) handle it.
   const isKnownPart = (e) => e.type === 'PERSON' && Boolean(owners.get(e.text.trim()));
   const reserved = placeholderRanges(text);
-  return [...entitiesToSpans(text, candidates.filter((e) => !isKnownPart(e))), ...nameAliasSpans(text, owners)]
+  // Part of "model detection" in Settings, so it follows the same switch.
+  const orgRule = settings.useModel && settings.modelTypes.ORGANIZATION === true ? orgSuffixSpans(text) : [];
+  return [...entitiesToSpans(text, candidates.filter((e) => !isKnownPart(e))), ...nameAliasSpans(text, owners), ...orgRule]
     .filter((s) => !insideAny(s, reserved));
 }
 

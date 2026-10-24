@@ -121,6 +121,26 @@
       </form>
     </section>
 
+    <section class="card">
+      <div class="card-head">
+        <h2>Files</h2>
+        <a href="../files/files.html">Clean or restore a file by hand</a>
+      </div>
+      <p class="muted">Text and code files, CSV, JSON, Word, Excel and PowerPoint files are cleaned before an AI site receives them, and author names are removed from Office files. PDFs and images can't be checked.</p>
+      <div class="toggles start">
+        <label class="switch">
+          <input type="checkbox" id="checkFiles">
+          <span class="track"></span>
+          <span>Check files before they are uploaded to a protected site</span>
+        </label>
+        <label class="switch">
+          <input type="checkbox" id="holdUncheckedFiles">
+          <span class="track"></span>
+          <span>Ask before uploading files that can't be checked (PDFs, images)</span>
+        </label>
+      </div>
+    </section>
+
     <section class="card help">
       <h2>Optional: a stronger model with Ollama</h2>
       <p class="muted">The built-in model needs no setup. If you want a larger model that also reads addresses and case numbers in free text:</p>

@@ -54,4 +54,12 @@ kbd {
 }
 
 .warn-text { color: var(--warn); }
+.file-link { white-space: nowrap; }
 .error-text { color: var(--danger); }
+
+.tally { display: grid; gap: 8px; padding: 10px 12px; border-radius: 10px; background: var(--surface); border: 1px solid var(--border); }
+.tally-head { font-weight: 700; font-size: 13px; }
+.tally-head span { font-weight: 400; color: var(--muted); }
+.tally-types { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 12px; font-size: 12px; }
+.tally-sites { font-size: 12px; color: var(--muted); }
+.tally-sites strong { color: var(--text); font-weight: 600; }

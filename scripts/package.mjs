@@ -15,6 +15,7 @@ const REQUIRED = [
   'vendor/transformers/transformers.min.js',
   'vendor/ort/ort-wasm-simd-threaded.asyncify.mjs',
   'vendor/ort/ort-wasm-simd-threaded.asyncify.wasm',
+  'vendor/fflate/fflate.js',
   ...BUILTIN_MODEL.files.map((file) => `vendor/models/${BUILTIN_MODEL.id}/${file}`),
 ];
 

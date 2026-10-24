@@ -4,9 +4,13 @@
 
 import { mergeSettings } from '../core/settings.js';
 import { createVault, isVault } from '../core/vault.js';
+import { emptyStats } from '../core/report.js';
 
 const SETTINGS_KEY = 'settings';
 const VAULT_KEY = 'vault';
+// Session counters for the Vault tab (runs and mentions per type). Memory only,
+// cleared with the vault.
+const STATS_KEY = 'stats';
 // Only the per-type counts, never values. Survives browser restarts and
 // extension updates so placeholder numbers are never handed out twice.
 const COUNTERS_KEY = 'placeholderCounters';
@@ -35,7 +39,14 @@ export const setVault = (vault) => Promise.all([
   chrome.storage.local.set({ [COUNTERS_KEY]: vault.counters }),
 ]);
 
-export const clearVault = () => chrome.storage.session.remove(VAULT_KEY);
+export const clearVault = () => chrome.storage.session.remove([VAULT_KEY, STATS_KEY]);
+
+export async function getStats() {
+  const { [STATS_KEY]: stored } = await chrome.storage.session.get(STATS_KEY);
+  return stored && typeof stored === 'object' && Number.isFinite(stored.runs) ? stored : emptyStats();
+}
+
+export const setStats = (stats) => chrome.storage.session.set({ [STATS_KEY]: stats });
 
 // Serializes read-modify-write cycles on the vault so concurrent pastes
 // cannot hand out the same placeholder twice.

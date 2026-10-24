@@ -21,6 +21,11 @@
       .close { background: none; border: 0; color: inherit; opacity: .6; cursor: pointer; font-size: 16px; line-height: 1; padding: 2px 4px; }
       .close:hover { opacity: 1; }
       .spinner { width: 12px; height: 12px; border: 2px solid #2dd4bf55; border-top-color: #2dd4bf; border-radius: 50%; animation: spin .8s linear infinite; flex: none; }
+      .summary { margin-top: 3px; font-size: 12px; color: #99f6e4; }
+      .items { margin: 8px 0 0; display: grid; gap: 4px; }
+      .item { font-size: 12px; display: grid; gap: 1px; }
+      .item b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .item span { opacity: .75; }
       .body { margin-top: 4px; opacity: .85; white-space: pre-wrap; word-break: break-word; }
       ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 3px; }
       li { display: flex; gap: 6px; align-items: baseline; font-size: 12px; }
@@ -68,6 +73,7 @@
       close.addEventListener('click', () => toast.remove());
       head.append(close);
       toast.append(head);
+      if (opts.summary) toast.append(el('div', 'summary', opts.summary));
 
       if (opts.lines?.length) {
         const list = el('ul');
@@ -75,6 +81,15 @@
           const li = el('li');
           li.append(el('span', 'from', from), el('span', null, '→'), el('span', 'to', to));
           list.append(li);
+        });
+        toast.append(list);
+      }
+      if (opts.items?.length) {
+        const list = el('div', 'items');
+        opts.items.forEach(({ label, detail }) => {
+          const row = el('div', 'item');
+          row.append(el('b', null, label), el('span', null, detail));
+          list.append(row);
         });
         toast.append(list);
       }

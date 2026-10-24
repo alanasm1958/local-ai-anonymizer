@@ -16,6 +16,11 @@ export const BUILTIN_MODEL = Object.freeze({
 });
 
 export const NER_MIN_SCORE = 0.6;
+// Multi-word person names get a lower bar: a command word at the start of a
+// prompt ("Call Priya Raman...") drops the model's confidence to about 0.5.
+// Single words keep the normal bar ("Stack trace" was tagged at 0.5).
+// Measured with npm run eval.
+export const PERSON_MIN_SCORE = 0.45;
 export const NER_CHUNK_CHARS = 1200; // about 300 tokens for prose
 // The model reads at most 512 tokens and silently drops the rest. Code, URLs
 // and hex tokenize at up to one token per character, so chunks are re-split
@@ -48,7 +53,9 @@ export const NEVER_ENTITIES = new Set([
 ]);
 
 const JOINER = /^[-'’]$/;
-const NEAR_GAP = /^[\s\-'’.]{0,3}$/;
+// Gaps allowed inside one entity. No line breaks: a signature block like
+// "John Smith / Acme Corp / London" is three entities, not one.
+const NEAR_GAP = /^[ \t\-'’.]{0,3}$/;
 
 const parseLabel = (label) => {
   const match = /^([BI])-(.+)$/.exec(label ?? '');
@@ -70,6 +77,17 @@ function locate(text, tokens) {
     cursor = start + piece.length;
   }
   return located;
+}
+
+const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
+
+// A command word at the start of a prompt ("Call Priya Raman...") can leave
+// the model unsure of a name and mislabel the surname (I-ORG). Keep it with
+// the person only when the model is unsure of both words; a confident name
+// ("Maria Gonzalez") must not swallow a following organization.
+function unsureSurname(current, token, gap) {
+  return Boolean(current) && current.kind === 'PER' && token.prefix === 'I' && token.kind !== 'PER'
+    && gap === ' ' && token.score < NER_MIN_SCORE && mean(current.scores) < NER_MIN_SCORE;
 }
 
 const newGroup = (token) => ({ kind: token.kind, start: token.start, end: token.end, scores: [token.score] });
@@ -96,8 +114,9 @@ function group(text, located) {
       continue;
     }
     const gap = current ? text.slice(current.end, token.start) : '';
-    const continues = current && current.kind === token.kind
-      && ((token.prefix === 'I' && NEAR_GAP.test(gap)) || gap === '');
+    const sameKind = current && current.kind === token.kind;
+    const continues = (sameKind && (gap === '' || (token.prefix === 'I' && NEAR_GAP.test(gap))))
+      || unsureSurname(current, token, gap);
     if (continues) {
       current = extend(current, token);
     } else {
@@ -108,8 +127,6 @@ function group(text, located) {
   close();
   return groups;
 }
-
-const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
 
 // Two adjacent groups that are really one entity:
 // - "O'Brien" + "-" (tagged O) + "Gonzalez": same type across a joiner.
@@ -134,6 +151,9 @@ function mergeJoined(text, groups, options) {
   }, []);
 }
 
+// "Ask", "Call", "Dear" on their own are never a name, however the model scores them.
+const isNoiseWord = (value) => LEADING_NOISE.has(value.toLowerCase().replace(/[.,:]$/, ''));
+
 function trimLeadingNoise(text, start, end) {
   let from = start;
   for (;;) {
@@ -143,18 +163,28 @@ function trimLeadingNoise(text, start, end) {
   }
 }
 
+const isMultiWord = (value) => /\s/.test(value.trim());
+
+// Multi-word person names get the lower bar; judged after greeting and
+// command words are trimmed, so "Hi Team" is not a two-word name.
+function threshold(kind, value, minScore) {
+  return kind === 'PER' && isMultiWord(value) ? Math.min(minScore, PERSON_MIN_SCORE) : minScore;
+}
+
 // `types` (optional): entity types the caller wants; used to decide whether a
 // place may be folded into a following organization name.
 export function alignTokens(text, tokens, { offset = 0, minScore = NER_MIN_SCORE, types } = {}) {
   if (!text) return [];
   const mergePlaces = !types || types.includes('ORGANIZATION');
   return mergeJoined(text, group(text, locate(text, tokens)), { minScore, mergePlaces })
-    .filter((g) => LABEL_TO_TYPE[g.kind] && mean(g.scores) >= minScore)
+    .filter((g) => LABEL_TO_TYPE[g.kind])
     .map((g) => {
       const start = trimLeadingNoise(text, g.start, g.end);
-      return { text: text.slice(start, g.end), type: LABEL_TO_TYPE[g.kind], start: start + offset, end: g.end + offset, score: mean(g.scores) };
+      return { kind: g.kind, text: text.slice(start, g.end), start, end: g.end, score: mean(g.scores) };
     })
-    .filter((e) => e.text.length >= 2 && !NEVER_ENTITIES.has(e.text));
+    .filter((e) => e.score >= threshold(e.kind, e.text, minScore))
+    .map((e) => ({ text: e.text, type: LABEL_TO_TYPE[e.kind], start: e.start + offset, end: e.end + offset, score: e.score }))
+    .filter((e) => e.text.length >= 2 && !NEVER_ENTITIES.has(e.text) && !isNoiseWord(e.text));
 }
 
 async function fitToModel(chunk, countTokens, maxTokens) {

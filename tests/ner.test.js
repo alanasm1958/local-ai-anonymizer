@@ -163,3 +163,60 @@ test('BUILTIN_MODEL lists every file the runtime needs', () => {
     assert.ok(BUILTIN_MODEL.files.includes(f), f);
   }
 });
+
+// Captured from the built-in model: a command word at the start of the
+// sentence drops its confidence and mislabels the surname as I-ORG.
+test('an unsure person name after a command word is still caught whole', () => {
+  const text = 'Call Priya Raman at Tata Consultancy Services on +91 98450 12345.';
+  const tokens = [
+    tok('Call', 'O', 0.94), tok('P', 'B-PER', 0.57), tok('##riya', 'B-PER', 0.48), tok('Rama', 'I-ORG', 0.47), tok('##n', 'O', 0.41),
+    tok('at', 'O'), tok('Ta', 'B-ORG'), tok('##ta', 'B-ORG'), tok('Consul', 'I-ORG'), tok('##tan', 'I-ORG'), tok('##cy', 'I-ORG'), tok('Services', 'I-ORG'),
+    tok('on', 'O'),
+  ];
+  assert.deepEqual(pairs(alignTokens(text, tokens)), [['Priya Raman', 'PERSON'], ['Tata Consultancy Services', 'ORGANIZATION']]);
+});
+
+test('weak non-person entities still need the normal confidence', () => {
+  const tokens = [tok('Visit', 'O'), tok('Leeds', 'B-LOC', 0.5)];
+  assert.deepEqual(alignTokens('Visit Leeds', tokens), []);
+});
+
+test('a single unsure word tagged as a person still needs the normal confidence', () => {
+  const tokens = [tok('Stack', 'B-PER', 0.5), tok('trace', 'O'), tok('mentions', 'O')];
+  assert.deepEqual(alignTokens('Stack trace mentions', tokens), []);
+});
+
+// Captured from the built-in model (Node, q8). A confident person name must
+// not swallow the next entity just because it is tagged I-.
+test('a confident name does not absorb a following organization', () => {
+  const text = 'Maria Gonzalez Northwind Traders Leeds';
+  const tokens = [
+    tok('Maria', 'B-PER', 0.98), tok('Gonzalez', 'I-PER', 0.94), tok('North', 'I-ORG', 0.51), tok('##wind', 'I-ORG', 0.71),
+    tok('Trade', 'O', 0.77), tok('##rs', 'O', 0.77), tok('Leeds', 'I-ORG', 0.51),
+  ];
+  assert.deepEqual(pairs(alignTokens(text, tokens)), [['Maria Gonzalez', 'PERSON'], ['Northwind', 'ORGANIZATION']]);
+});
+
+test('entities never continue across a line break', () => {
+  const text = 'John Smith\nAcme Corp\nLondon';
+  const tokens = [
+    tok('John', 'B-PER', 0.98), tok('Smith', 'I-PER', 0.97), tok('A', 'I-ORG', 0.94), tok('##c', 'I-ORG', 0.95),
+    tok('##me', 'I-ORG', 0.83), tok('Corp', 'I-ORG', 0.99), tok('London', 'I-ORG', 0.96),
+  ];
+  assert.deepEqual(pairs(alignTokens(text, tokens)), [['John Smith', 'PERSON'], ['Acme Corp', 'ORGANIZATION'], ['London', 'ORGANIZATION']]);
+});
+
+test('the multi-word allowance is judged after greeting words are trimmed', () => {
+  const tokens = [tok('Hi', 'B-PER', 0.46), tok('Team', 'I-PER', 0.46), tok(',', 'O')];
+  assert.deepEqual(alignTokens('Hi Team,', tokens), []);
+});
+
+// Captured: in the browser runtime "Ask" scored just over 0.6 as its own name.
+test('a command or greeting word on its own is never a name', () => {
+  const text = 'Ask Hannah Becker or Tom Ruiz';
+  const tokens = [
+    tok('Ask', 'B-PER', 0.61), tok('Hannah', 'B-PER', 0.95), tok('Becker', 'I-PER', 0.99),
+    tok('or', 'O'), tok('Tom', 'B-PER', 1.0), tok('Ruiz', 'I-PER', 0.99),
+  ];
+  assert.deepEqual(pairs(alignTokens(text, tokens)), [['Hannah Becker', 'PERSON'], ['Tom Ruiz', 'PERSON']]);
+});

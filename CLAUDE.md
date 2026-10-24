@@ -14,12 +14,20 @@ The user chose the smaller English-only model over a multilingual one (2026-10-2
 | `src/content/content.js` | Classic script (MV3 content scripts cannot be ES modules). Intercepts paste, shows toasts. Talks to the worker via `chrome.runtime.sendMessage`. |
 | `src/content/toast.js` | On-page panel in a closed shadow root, exposed as `globalThis.__anonymizerToast`. Loaded first. |
 | `src/content/reveal.js` | Loaded before content.js (shared isolated world, exposed as `globalThis.__anonymizerReveal`). Shows real values in replies via spans whose visible text is in a CLOSED shadow root; the page DOM keeps the placeholder. Never touches editable elements. |
+| `src/core/files.js` | Anonymize/restore whole files: classify by extension, text and JSON handlers, Office via `ooxml.js`, file names. Returns `unsupported` with a reason instead of passing unknown formats through. |
+| `src/core/ooxml.js` | Office XML text engine (regex scan, no DOMParser so it runs in the worker): text in document order across split runs, `rewriteSegments` puts each replacement in the first run it touches, metadata/author clearing, notes for what isn't checked. |
+| `src/core/orgs.js` | Rule-based organizations ("X Traders", "Y Ltd") for when the model misses one at a sentence start; follows the model switch and ORGANIZATION type. |
+| `src/content/uploads.js` | Upload guard: file inputs (stops input/change, clears the input, re-fires with cleaned files), file paste/drop; holds unsupported files. Messages carry the MIME type as `mime` because `type` is the handler name. |
+| `src/files/` | Clean or restore files by hand (a page, because popups close when a file picker opens). |
+| `tests/fixtures/` | Real .docx/.xlsx/.pptx from python-docx, openpyxl, python-pptx, LibreOffice and textutil (`make-fixtures.py`). |
+| `src/core/report.js` | Per-run summary by type (`summarizeReplacements`, `formatBreakdown`) and the session tally (`sessionTally`). The worker attaches `summary` to every anonymize result and keeps run/mention counts in `storage.session` (`stats`), cleared with the vault. |
 | `src/core/names.js` | Lone first/last names of known full names get the full name's placeholder (`span.aliasOf`). `COMMON_WORD_NAMES` guards words like Will/May. |
 | `src/core/ner.js` | Model id/constants, `alignTokens` (word pieces with no offsets back to text spans), `detectWithModel` (chunking). Stoplist `NEVER_ENTITIES`. |
 | `src/offscreen/` | Hidden page that runs Transformers.js (the MV3 worker can't: no dynamic `import()`). Only answers messages with `target: 'offscreen'`. Closes itself after 10 idle minutes. |
 | `src/background/builtin.js` | Creates the offscreen doc, retries while its listener registers, exposes `builtinClient.detectEntities`. |
 | `scripts/vendor.mjs` | Copies `transformers.min.js` (self-contained build; the `.web` build has bare imports) and ORT `asyncify` wasm into `vendor/`, downloads the model. Runs on `npm install`. `vendor/` is gitignored. |
 | `scripts/eval-ner.mjs` + `tests/eval/samples.js` | Detection-quality eval in Node (`npm run eval`). |
+| `store/` | Chrome Web Store submission: listing, privacy policy (md + html), permission and data-use answers, checklist, images (`npm run store-assets` via `scripts/store-assets.mjs`). Claims there must stay true to the code; re-check after behavior changes. |
 | `scripts/package.mjs` | Builds `dist/local-ai-anonymizer-<version>.zip` (manifest, icons, src, vendor). Fails if manifest and package.json versions differ. |
 | `src/background/state.js` | Settings (`storage.local`), vault (`storage.session`), vault mutex, worker keep-alive |
 | `src/background/integrations.js` | Dynamic DNR rule that strips `Origin` on requests to the model host (scoped to `initiatorDomains: [extension id]` so pages cannot abuse it), custom-site content script registration, badge |
@@ -42,6 +50,12 @@ The user chose the smaller English-only model over a multilingual one (2026-10-2
 - Paste/drop text comes from `transferText`: text/plain, else text/html via inert DOMParser, else text/uri-list. Non-text form fields (password, number, date) return before reading the clipboard.
 - Name parts (`span.aliasOf`, source `alias`) rank below model spans; known vault values skip values under 3 chars and `NEVER_ENTITIES`, and only apply when `useModel` is on.
 - minimum_chrome_version 128 (caretPositionFromPoint, matchOriginAsFallback).
+- NER: a different-type I- token joins a person group only when both are below NER_MIN_SCORE and separated by one space (`unsureSurname`); no entity spans a line break; the multi-word person threshold (0.45) is judged after trimming greeting/command words; a lone command/greeting word is never a name. Fixtures in tests/ner.test.js are captured from the real model.
+- Office engine: `OOXML_RULES` lists text rules (element text, e.g. w:t, w:delText, w:instrText) and attribute rules (pivot cache `<s v>`, external link targets); every matching rule runs on a part. CDATA in a processed part makes the file unsupported (fail safe). Gap notes are only added when cleaning, not restoring.
+- JSON is edited in place on the raw text (string tokens only), never re-serialized: numbers like 12345678901234567890 must survive byte for byte.
+- Content script state starts protected (fail closed) and stays protected if the worker can't be reached; only a removed/reloaded extension (no `chrome.runtime.id`) turns it off.
+- Never test file uploads on live AI sites without the user's go-ahead: unlike pasting into a box, an upload sends the file to that company's servers.
+- e2e routes the browser through `tests/helpers/recording-proxy.js`; Playwright forces loopback through any proxy unless localhost is in the bypass list.
 - `[hidden] { display: none !important }` in `src/ui/theme.css` is load-bearing: component `display` rules otherwise override `hidden`.
 - No em dashes in copy or docs (user preference).
 - MV3 forbids remote code: Transformers.js defaults `wasmPaths` to the jsdelivr CDN, so offscreen.js must point it at `vendor/ort/`. CSP needs `'wasm-unsafe-eval'`.

@@ -9,13 +9,21 @@
   const MIN_PASTE_LENGTH = 2;
   const MAX_LISTED = 6;
 
-  const state = { active: false, interceptPaste: false, restoreReplies: false };
+  // Fail closed: protection is on from the first moment, before the worker
+  // has confirmed this site's settings.
+  const PROTECTED = Object.freeze({ active: true, interceptPaste: true, checkFiles: true, holdUncheckedFiles: true });
+  const state = { ...PROTECTED, restoreReplies: false };
   let dispatchingSynthetic = false;
 
-  // toast.js and reveal.js are injected first into the same isolated world.
+  // toast.js, reveal.js and uploads.js are injected first into the same isolated world.
   const ui = globalThis.__anonymizerToast;
   const revealer = globalThis.__anonymizerReveal?.createRevealer({
     lookup: (placeholders) => send('lookup', { placeholders }),
+  });
+  const uploads = globalThis.__anonymizerUploads?.createUploadGuard({
+    send: (type, payload) => send(type, payload),
+    ui,
+    settings: () => state,
   });
 
   // ---------- messaging ----------
@@ -38,8 +46,14 @@
       state.active = status.active;
       state.interceptPaste = status.interceptPaste;
       state.restoreReplies = status.restoreReplies;
+      state.checkFiles = status.checkFiles;
+      state.holdUncheckedFiles = status.holdUncheckedFiles;
     } catch {
-      state.active = false;
+      // Extension removed or reloaded: get out of the way. Worker unreachable:
+      // stay protected; pastes and uploads then stop with an error instead
+      // of passing through.
+      if (!chrome.runtime?.id) state.active = false;
+      else Object.assign(state, PROTECTED);
     }
     if (state.active && state.restoreReplies) revealer?.start();
     else revealer?.stop();
@@ -205,12 +219,30 @@
       || data.getData('text/uri-list');
   }
 
+  const isOwnEvent = () => dispatchingSynthetic || Boolean(uploads?.isDispatching());
+
+  // Files in a paste or drop go to the upload guard instead of the text path.
+  function guardFiles(event, kind, origin) {
+    const transfer = kind === 'drop' ? event.dataTransfer : event.clipboardData;
+    // "Copy image" puts the image plus HTML with no text on the clipboard;
+    // that is a file paste. Copying from Word or Excel carries real text.
+    const htmlHasText = Boolean(htmlToText(transfer?.getData('text/html') ?? '').trim());
+    const files = uploads?.filesOf(transfer, kind, htmlHasText) ?? [];
+    if (!files.length || !state.checkFiles) return false;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const point = { x: event.clientX, y: event.clientY };
+    uploads.guard(files, (out) => uploads.dispatchFiles(origin, out, kind, point));
+    return true;
+  }
+
   function onPaste(event) {
-    if (dispatchingSynthetic || !state.active || !state.interceptPaste) return;
+    if (isOwnEvent() || !state.active) return;
     // composedPath()[0] is the real target even inside open shadow roots,
     // where event.target is retargeted to the shadow host.
     const origin = event.composedPath()[0] ?? event.target;
-    if (isNonTextField(origin)) return;
+    // Files first: they may be dropped or pasted onto a file input itself.
+    if (guardFiles(event, 'paste', origin) || isNonTextField(origin) || !state.interceptPaste) return;
     const text = transferText(event.clipboardData);
     if (text.trim().length < MIN_PASTE_LENGTH) return;
     const target = editableRoot(origin);
@@ -261,9 +293,9 @@
   function onDrop(event) {
     const drag = pageDrag;
     pageDrag = null;
-    if (dispatchingSynthetic || !state.active || !state.interceptPaste) return;
+    if (isOwnEvent() || !state.active) return;
     const origin = event.composedPath()[0] ?? event.target;
-    if (isNonTextField(origin)) return;
+    if (guardFiles(event, 'drop', origin) || isNonTextField(origin) || !state.interceptPaste) return;
     const text = transferText(event.dataTransfer);
     if (text.trim().length < MIN_PASTE_LENGTH) return;
     if (drag && sameText(drag.text, text)) return;
@@ -337,22 +369,25 @@
     }
   }
 
-  function describeResult({ replacements, warnings }) {
+  function describeResult({ replacements, warnings, summary }) {
     const unique = [...new Map(replacements.map((r) => [r.placeholder, r])).values()];
-    const count = unique.length;
+    const count = summary?.items ?? unique.length;
     const lines = unique.slice(0, MAX_LISTED).map((r) => ({ from: r.original, to: r.placeholder }));
-    const extra = count > MAX_LISTED ? `and ${count - MAX_LISTED} more` : '';
+    const extra = unique.length > MAX_LISTED ? `and ${unique.length - MAX_LISTED} more` : '';
     return {
       status: warnings.length ? 'warn' : 'done',
       title: count ? `Protected ${count} item${count === 1 ? '' : 's'}` : 'No sensitive data found',
+      summary: summary?.breakdown ?? '',
       lines,
       body: [extra, ...warnings].filter(Boolean).join('\n'),
       sticky: warnings.length > 0,
     };
   }
 
+
   // ---------- wiring ----------
 
+  uploads?.watchFileInputs();
   window.addEventListener('paste', onPaste, true);
   window.addEventListener('drop', onDrop, true);
   window.addEventListener('dragstart', onDragStart, true);

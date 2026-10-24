@@ -72,3 +72,11 @@ test('new pattern types default on and old stored settings pick them up', () => 
 test('builtinTypes lists what the built-in model can find', () => {
   assert.deepEqual(BUILTIN_MODEL_TYPES, ['PERSON', 'ORGANIZATION', 'LOCATION']);
 });
+
+test('file checking and holding default on and can be turned off', () => {
+  assert.equal(DEFAULT_SETTINGS.checkFiles, true);
+  assert.equal(DEFAULT_SETTINGS.holdUncheckedFiles, true);
+  const merged = mergeSettings({ checkFiles: false, holdUncheckedFiles: 'nope' });
+  assert.equal(merged.checkFiles, false);
+  assert.equal(merged.holdUncheckedFiles, true);
+});

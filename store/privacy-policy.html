@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Local AI Anonymizer Privacy Policy</title>
+  <meta name="description" content="Privacy policy for the Local AI Anonymizer browser extension. No data collection; all analysis happens on your device.">
+  <style>
+    :root {
+      --bg: #f6f8f7; --surface: #ffffff; --text: #0f1f1c; --muted: #4d5e5a;
+      --border: #dbe3e0; --accent: #0f766e; --code: #eef3f1;
+      color-scheme: light;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #0c1413; --surface: #121d1b; --text: #e4efec; --muted: #9db0ab;
+        --border: #253632; --accent: #2dd4bf; --code: #182624;
+        color-scheme: dark;
+      }
+    }
+    :root[data-theme="dark"] {
+      --bg: #0c1413; --surface: #121d1b; --text: #e4efec; --muted: #9db0ab;
+      --border: #253632; --accent: #2dd4bf; --code: #182624;
+      color-scheme: dark;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font: 17px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    main {
+      max-width: 720px; margin: 40px auto; padding: 36px 40px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+    }
+    h1 { font-size: 30px; line-height: 1.2; margin: 0 0 6px; }
+    h2 { font-size: 20px; margin: 34px 0 8px; }
+    p, li { color: var(--text); }
+    .meta { color: var(--muted); margin: 0 0 24px; }
+    .summary { border-left: 4px solid var(--accent); padding: 4px 0 4px 16px; margin: 24px 0; }
+    ul { padding-left: 22px; }
+    li { margin: 4px 0; }
+    code { background: var(--code); padding: 1px 6px; border-radius: 5px; font-size: 0.9em; }
+    a { color: var(--accent); }
+    @media (max-width: 760px) {
+      main { margin: 0; padding: 28px 16px; border-radius: 0; border-width: 0 0 1px; }
+      h1 { font-size: 26px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Local AI Anonymizer Privacy Policy</h1>
+    <p class="meta">Effective date: October 24, 2026</p>
+    <p>Local AI Anonymizer ("the extension") is published by <strong>Alan Al-Jammoor</strong>. Questions about this policy: <a href="mailto:a.s.aljammoor@gmail.com">a.s.aljammoor@gmail.com</a>.</p>
+
+    <div class="summary">
+      <p><strong>In short:</strong> the extension does not collect, store on any server, sell or share your data. It has no servers, no analytics and no tracking. All analysis happens inside your browser on your own device.</p>
+    </div>
+
+    <h2>What the extension handles, and where it stays</h2>
+    <p><strong>Text you choose to anonymize.</strong> This is text you paste or drag into a protected AI chat site, text you select and anonymize with the right-click menu or the keyboard shortcut, and text you type into the extension's popup. It is analyzed on your device by pattern rules and by a small language model that ships inside the extension. It is not sent to the developer or to any third party.</p>
+    <p><strong>Files.</strong> Files you attach to a protected AI chat site, or open on the extension's file page, are read and cleaned on your device in the same way, and the cleaned copy is handed to the site or offered to you as a download. Author names are removed from Office documents. The extension does not keep copies of your files.</p>
+    <p><strong>The placeholder list.</strong> To show you real names in an AI's reply, the extension keeps a list that pairs each placeholder (for example <code>[PERSON_1]</code>) with the original value, plus the website it was pasted on. This list lives in your browser's session memory. It is erased when you close the browser, or immediately when you press <strong>Clear vault</strong>.</p>
+    <p><strong>Session summary.</strong> To show what was protected, the extension counts the replacements by type and by website. These counts are kept with the placeholder list and erased with it.</p>
+    <p><strong>Settings.</strong> Your preferences are saved in your browser's local extension storage on your device. These include, for example, the types of data to detect, the protected sites, the detection engine and its address, and on/off switches. The extension also stores the last number used for each placeholder type (numbers only, never the values), which stays after the browser closes so a placeholder number is never reused.</p>
+
+    <h2>Network activity</h2>
+    <p>With the default built-in model, the extension makes no network requests. The model and the code that runs it are included in the extension package. The extension never downloads code or models at runtime.</p>
+    <p><strong>Optional local engine.</strong> In Settings you can choose to use Ollama or another OpenAI-compatible server instead of the built-in model. Text you anonymize is then sent to the address you enter so that server can detect names in it. By default that address is your own computer (<code>localhost</code>). If you enter an address on another machine, Settings warns you, and your browser asks for your permission before the extension can contact it. The developer has no access to that server or its data.</p>
+
+    <h2>What the extension does not do</h2>
+    <ul>
+      <li>It does not collect personal information, browsing history or website content for the developer.</li>
+      <li>It does not use analytics, advertising, tracking or fingerprinting.</li>
+      <li>It does not sell, rent or transfer data to anyone.</li>
+      <li>It does not require an account.</li>
+    </ul>
+
+    <h2>Permissions</h2>
+    <p>The extension asks only for the browser permissions it needs to work on your device:</p>
+    <ul>
+      <li>storage, for the settings and session list above</li>
+      <li>context menus and keyboard shortcuts</li>
+      <li>access to supported AI chat sites, to anonymize text you paste there</li>
+      <li>an offscreen page, to run the built-in model</li>
+      <li>access to <code>localhost</code>, for the optional local engine</li>
+    </ul>
+    <p>When you use the right-click menu or the keyboard shortcut on another site, the browser gives the extension temporary access to that one tab. Lasting access to another site is requested only when you add it in Settings, and only for that site and its subdomains.</p>
+
+    <h2>Limited Use</h2>
+    <p>The use of information received by the extension adheres to the <a href="https://developer.chrome.com/docs/webstore/program-policies/user-data-faq">Chrome Web Store User Data Policy</a>, including the Limited Use requirements. Data is used only to provide the extension's single purpose: removing sensitive details from text before it is shared with AI tools, and restoring them for you locally.</p>
+
+    <h2>Children</h2>
+    <p>The extension is not directed at children under 13 and does not knowingly collect any information from anyone.</p>
+
+    <h2>Changes</h2>
+    <p>If this policy changes, the new version will be posted at this address with a new effective date.</p>
+
+    <h2>Contact</h2>
+    <p><a href="mailto:a.s.aljammoor@gmail.com">a.s.aljammoor@gmail.com</a></p>
+  </main>
+</body>
+</html>
