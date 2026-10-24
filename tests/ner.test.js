@@ -133,3 +133,33 @@ test('detectWithModel re-splits chunks that exceed the model token limit', async
 test('BUILTIN_MODEL pins an exact model revision', () => {
   assert.match(BUILTIN_MODEL.revision, /^[0-9a-f]{40}$/);
 });
+
+test('a place directly followed by an organization is one organization', () => {
+  const text = 'Write to Northwind Traders and Leeds City Council in Leeds.';
+  const tokens = [
+    tok('Write', 'O'), tok('to', 'O'), tok('North', 'B-LOC'), tok('##wind', 'B-LOC'), tok('Trade', 'B-ORG'), tok('##rs', 'I-ORG'),
+    tok('and', 'O'), tok('Leeds', 'B-LOC'), tok('City', 'B-ORG'), tok('Council', 'I-ORG'),
+    tok('in', 'O'), tok('Leeds', 'B-LOC'), tok('.', 'O'),
+  ];
+  assert.deepEqual(pairs(alignTokens(text, tokens)), [
+    ['Northwind Traders', 'ORGANIZATION'], ['Leeds City Council', 'ORGANIZATION'], ['Leeds', 'LOCATION'],
+  ]);
+});
+
+test('a low-confidence organization next to a place is not merged into it', () => {
+  const tokens = [tok('London', 'B-LOC', 0.95), tok('Bridge', 'B-ORG', 0.3)];
+  assert.deepEqual(pairs(alignTokens('London Bridge', tokens)), [['London', 'LOCATION']]);
+});
+
+test('place and organization are not merged when organizations are not wanted', () => {
+  const tokens = [tok('Leeds', 'B-LOC'), tok('City', 'B-ORG'), tok('Council', 'I-ORG')];
+  assert.deepEqual(pairs(alignTokens('Leeds City Council', tokens, { types: ['LOCATION'] })), [
+    ['Leeds', 'LOCATION'], ['City Council', 'ORGANIZATION'],
+  ]);
+});
+
+test('BUILTIN_MODEL lists every file the runtime needs', () => {
+  for (const f of ['config.json', 'tokenizer.json', 'tokenizer_config.json', 'special_tokens_map.json', BUILTIN_MODEL.file]) {
+    assert.ok(BUILTIN_MODEL.files.includes(f), f);
+  }
+});

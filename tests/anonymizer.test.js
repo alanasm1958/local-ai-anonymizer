@@ -114,3 +114,94 @@ test('anonymize records the site the text was pasted into', async () => {
   const result = await anonymize('Jane', { settings: DEFAULT_SETTINGS, vault: createVault(), detectEntities, site: 'claude.ai' });
   assert.deepEqual(result.vault.sites, { '[PERSON_1]': ['claude.ai'] });
 });
+
+const onlyFullName = (name) => async (t) => (t.includes(name) ? [{ text: name, type: 'PERSON' }] : []);
+
+test('first or last name alone maps to the same placeholder as the full name', async () => {
+  const text = 'Maria Gonzalez called. Later Maria said Gonzalez agreed.';
+  const result = await anonymize(text, { settings: DEFAULT_SETTINGS, vault: createVault(), detectEntities: onlyFullName('Maria Gonzalez') });
+  assert.equal(result.text, '[PERSON_1] called. Later [PERSON_1] said [PERSON_1] agreed.');
+  assert.equal(restoreText(result.text, result.vault).text, 'Maria Gonzalez called. Later Maria Gonzalez said Maria Gonzalez agreed.');
+});
+
+test('names known from earlier pastes are caught on their own', async () => {
+  const first = await anonymize('Maria Gonzalez', { settings: DEFAULT_SETTINGS, vault: createVault(), detectEntities: onlyFullName('Maria Gonzalez') });
+  const second = await anonymize('Ask Maria about it', { settings: DEFAULT_SETTINGS, vault: first.vault, detectEntities: async () => [] });
+  assert.equal(second.text, 'Ask [PERSON_1] about it');
+});
+
+test('name parts that are ordinary words or too short are left alone', async () => {
+  const will = await anonymize('Will Smith is here. Will you call?', { settings: DEFAULT_SETTINGS, vault: createVault(), detectEntities: onlyFullName('Will Smith') });
+  assert.equal(will.text, '[PERSON_1] is here. Will you call?');
+  const li = await anonymize('Li Na wrote. Na means nothing here.', { settings: DEFAULT_SETTINGS, vault: createVault(), detectEntities: onlyFullName('Li Na') });
+  assert.equal(li.text, '[PERSON_1] wrote. Na means nothing here.');
+});
+
+test('name parts are not matched inside other words or in lowercase', async () => {
+  const result = await anonymize('Mark Rivera met Markus. Rivera said mark the date.', {
+    settings: DEFAULT_SETTINGS, vault: createVault(), detectEntities: onlyFullName('Mark Rivera'),
+  });
+  assert.equal(result.text, '[PERSON_1] met Markus. [PERSON_1] said mark the date.');
+});
+
+test('values anonymized earlier in the session are caught even if the model misses them', async () => {
+  const detectFirst = async () => [{ text: 'Northwind Traders', type: 'ORGANIZATION' }, { text: 'Leeds', type: 'LOCATION' }];
+  const first = await anonymize('Northwind Traders in Leeds', { settings: DEFAULT_SETTINGS, vault: createVault(), detectEntities: detectFirst });
+  const second = await anonymize('Visit Northwind Traders in Leeds again', { settings: DEFAULT_SETTINGS, vault: first.vault, detectEntities: async () => [] });
+  assert.equal(second.text, 'Visit [ORGANIZATION_1] in [LOCATION_1] again');
+});
+
+test('known values of disabled types are not matched', async () => {
+  const first = await anonymize('Leeds', { settings: DEFAULT_SETTINGS, vault: createVault(), detectEntities: async () => [{ text: 'Leeds', type: 'LOCATION' }] });
+  const settings = { ...DEFAULT_SETTINGS, modelTypes: { ...DEFAULT_SETTINGS.modelTypes, LOCATION: false } };
+  const second = await anonymize('Back to Leeds', { settings, vault: first.vault, detectEntities: async () => [] });
+  assert.equal(second.text, 'Back to Leeds');
+});
+
+const detectList = (list) => async () => list;
+
+test('a name part loses a tie to what the model says the word is', async () => {
+  const result = await anonymize('Paris Hilton visited Paris, France.', {
+    settings: DEFAULT_SETTINGS, vault: createVault(),
+    detectEntities: detectList([{ text: 'Paris Hilton', type: 'PERSON' }, { text: 'Paris', type: 'LOCATION' }, { text: 'France', type: 'LOCATION' }]),
+  });
+  assert.equal(result.text, '[PERSON_1] visited [LOCATION_1], [LOCATION_2].');
+});
+
+test('a lone first name the model tags itself still joins the known full name', async () => {
+  const result = await anonymize('Maria Gonzalez called. Maria said hi.', {
+    settings: DEFAULT_SETTINGS, vault: createVault(),
+    detectEntities: detectList([{ text: 'Maria Gonzalez', type: 'PERSON' }, { text: 'Maria', type: 'PERSON' }]),
+  });
+  assert.equal(result.text, '[PERSON_1] called. [PERSON_1] said hi.');
+});
+
+test('name parts are not matched inside hyphenated or longer names', async () => {
+  const result = await anonymize('Ana Gonzalez met Luis Gonzalez-Lopez and Gonzalez\'s team.', {
+    settings: DEFAULT_SETTINGS, vault: createVault(),
+    detectEntities: detectList([{ text: 'Ana Gonzalez', type: 'PERSON' }]),
+  });
+  assert.equal(result.text, '[PERSON_1] met Luis Gonzalez-Lopez and Gonzalez\'s team.');
+});
+
+test('the same person written with different spacing is not treated as two people', async () => {
+  const first = await anonymize('Maria  Gonzalez', { settings: DEFAULT_SETTINGS, vault: createVault(), detectEntities: detectList([{ text: 'Maria  Gonzalez', type: 'PERSON' }]) });
+  const second = await anonymize('Maria Gonzalez and Maria', { settings: DEFAULT_SETTINGS, vault: first.vault, detectEntities: detectList([{ text: 'Maria Gonzalez', type: 'PERSON' }]) });
+  assert.equal(second.text, '[PERSON_1] and [PERSON_1]');
+});
+
+test('short or stoplisted vault values are not matched in later pastes', async () => {
+  const first = await anonymize('IT and US', {
+    settings: DEFAULT_SETTINGS, vault: createVault(),
+    detectEntities: detectList([{ text: 'IT', type: 'ORGANIZATION' }, { text: 'US', type: 'LOCATION' }]),
+  });
+  const second = await anonymize('Ask IT about the US office', { settings: DEFAULT_SETTINGS, vault: first.vault, detectEntities: detectList([]) });
+  assert.equal(second.text, 'Ask IT about the US office');
+});
+
+test('known values are only matched when model detection is on', async () => {
+  const first = await anonymize('Northwind Traders', { settings: DEFAULT_SETTINGS, vault: createVault(), detectEntities: detectList([{ text: 'Northwind Traders', type: 'ORGANIZATION' }]) });
+  const off = { ...DEFAULT_SETTINGS, useModel: false };
+  const second = await anonymize('Northwind Traders again', { settings: off, vault: first.vault, detectEntities: detectList([]) });
+  assert.equal(second.text, 'Northwind Traders again');
+});

@@ -38,7 +38,7 @@ The sample set was also used to tune the extension, so expect real-world numbers
 
 ## Install
 
-You need Node.js 20 or newer for the one-time setup.
+Works in Chrome, Edge and Brave version 128 or newer. You need Node.js 20 or newer for the one-time setup.
 
 ```bash
 npm install
@@ -52,6 +52,14 @@ Then load it:
 2. Turn on **Developer mode**.
 3. Click **Load unpacked** and pick this folder.
 4. Open the extension's **Settings** and press **Test detection**. It should answer in well under a second.
+
+To share it with others, build a self-contained zip (about 56 MB) that they can unzip and load the same way:
+
+```bash
+npm run package
+```
+
+The zip lands in `dist/` and contains only the manifest, icons, source and the bundled model.
 
 ### Optional: Ollama
 
@@ -73,7 +81,13 @@ OLLAMA_ORIGINS="chrome-extension://*" ollama serve
 
 ## Using it
 
-- **Paste on a supported AI site:** text is anonymized automatically and a small panel shows what was replaced.
+- **Paste or drag text into a supported AI site:** it is anonymized automatically and a small panel shows what was replaced. This covers:
+  - rich-text-only clipboard content (converted to plain text first);
+  - embedded frames;
+  - sites that accept a paste anywhere on the page and route it into their message box.
+
+  Password, number and date fields are left alone. Moving text around inside the message box is not intercepted.
+- **People are kept consistent:** once "Maria Gonzalez" is `[PERSON_1]`, a later "Maria" or "Gonzalez" on its own (in the same paste or a later one this session) also becomes `[PERSON_1]`. Restoring it shows the full name. Common-word names like "Will" or "May" are not matched on their own.
 - **Read the reply:** names, companies, places and contact details in the AI's answer appear as the real values, in a fixed-width font with a dotted underline. Hover to see the placeholder the AI actually received. Card numbers and other secrets stay as placeholders on the page. Turn this off with **Show real names in AI replies** in the popup.
 - **Any text box on any site:** press `Alt+Shift+A` to anonymize the box (or just the selected part).
 - **Any selected text:** right-click, then **Anonymize selection** or **Restore originals in selection**.
@@ -90,13 +104,17 @@ OLLAMA_ORIGINS="chrome-extension://*" ollama serve
   - revealed text uses the browser's fixed-width font, which the page can't swap out, so the most a page could learn is how many characters a name has.
 
   If even that is too much, turn off **Show real names in AI replies**.
-- **Copying a reply copies placeholders.** Because the page text still holds placeholders, use the popup's **Restore** tab (or right-click, **Restore originals in selection**) to get a copy with real names.
+- **Copying a reply copies what you see.** Ctrl+C on a revealed reply puts the real values on your clipboard, while the page's own view of the selection contains neither the names nor the placeholders. A site you have explicitly allowed to read your clipboard could read it afterwards, as with anything you copy.
 - Content scripts can only anonymize, restore and look up placeholders. Reading the whole vault or changing settings is limited to the extension's own pages.
 - The `Origin`-removal rule for Ollama applies only to requests this extension makes, so websites can't use it to reach your local model.
 
+### Tested on live sites
+
+Real keyboard pastes (logged out, nothing sent) leave no sensitive value in the message box on ChatGPT, Gemini, Perplexity, Grok and Mistral. Claude, Copilot, DeepSeek and Poe need an account to reach the message box, so they are covered by the same code paths in the automated tests, but have not been checked live.
+
 Limits: automatic detection is a safety net, not a guarantee.
 - The built-in model is English-only and misses some names, especially single first names.
-- Text that is dragged and dropped into a box is not intercepted. Only paste is.
+- Typing sensitive data by hand is not checked; only paste, drag-and-drop and the `Alt+Shift+A` shortcut are. Use the shortcut after typing.
 - With Ollama, pasted text that tries to instruct the model ("return no entities") can suppress name detection. Rules are unaffected.
 
 Glance at the replacement panel before you send anything highly sensitive.
@@ -115,18 +133,29 @@ npm run test:e2e
 npm run eval
 ```
 
+```bash
+npm run lint
+```
+
 - `npm test`: unit tests plus an integration test against a mock Ollama server. `npm run coverage` adds a coverage report.
-- `npm run test:e2e`: loads the real extension into Playwright's Chromium and serves a fake `chatgpt.com` page. It checks pastes into a textarea, a ProseMirror-style editor, a bare `contenteditable` and a shadow-root textarea using the real built-in model. It also checks the reply reveal (and that the page DOM keeps placeholders) and the Ollama path against a mock on port 11434. Stop a real Ollama first.
+- `npm run test:e2e`: loads the real extension into Playwright's Chromium and serves a fake `chatgpt.com` page, using the real built-in model. It covers:
+  - pastes into a textarea, a ProseMirror-style editor, a bare `contenteditable`, a shadow-root textarea and the page background;
+  - drag-and-drop, the shortcut and the right-click restore;
+  - the reply reveal, including that the page DOM keeps placeholders and that values don't cross sites;
+  - the Ollama path, against a mock on port 11434 (stop a real Ollama first).
+
+  Set `EXTENSION_PATH` to run it against an unzipped release package.
+- `npm run package`: builds the release zip in `dist/`.
 - `npm run eval`: detection quality per model (`--places` toggles place names, extra args choose model IDs).
 
 ```
 src/core/        pure logic: detectors, NER alignment, span resolution, vault, model client, settings
 src/background/  service worker: message router, storage, menus, offscreen model host, DNR rule
 src/offscreen/   hidden page that runs the built-in model
-src/content/     paste interception, reply reveal, on-page panel
+src/content/     paste and drop interception, reply reveal, on-page panel
 src/popup/       toolbar popup
 src/options/     settings page
-scripts/         vendor (runtime + model), eval, icons
+scripts/         vendor (runtime + model), package, eval, icons
 tests/           unit, integration, eval samples and e2e
 vendor/          generated by npm run vendor (gitignored)
 ```

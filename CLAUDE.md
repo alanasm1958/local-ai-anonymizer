@@ -12,12 +12,15 @@ The user chose the smaller English-only model over a multilingual one (2026-10-2
 | `src/core/` | Pure ES modules, no `chrome.*` calls. All logic that can be unit tested lives here. |
 | `src/background/service-worker.js` | Message router, storage, context menus, keyboard command. Only place that calls the model. |
 | `src/content/content.js` | Classic script (MV3 content scripts cannot be ES modules). Intercepts paste, shows toasts. Talks to the worker via `chrome.runtime.sendMessage`. |
+| `src/content/toast.js` | On-page panel in a closed shadow root, exposed as `globalThis.__anonymizerToast`. Loaded first. |
 | `src/content/reveal.js` | Loaded before content.js (shared isolated world, exposed as `globalThis.__anonymizerReveal`). Shows real values in replies via spans whose visible text is in a CLOSED shadow root; the page DOM keeps the placeholder. Never touches editable elements. |
+| `src/core/names.js` | Lone first/last names of known full names get the full name's placeholder (`span.aliasOf`). `COMMON_WORD_NAMES` guards words like Will/May. |
 | `src/core/ner.js` | Model id/constants, `alignTokens` (word pieces with no offsets back to text spans), `detectWithModel` (chunking). Stoplist `NEVER_ENTITIES`. |
 | `src/offscreen/` | Hidden page that runs Transformers.js (the MV3 worker can't: no dynamic `import()`). Only answers messages with `target: 'offscreen'`. Closes itself after 10 idle minutes. |
 | `src/background/builtin.js` | Creates the offscreen doc, retries while its listener registers, exposes `builtinClient.detectEntities`. |
 | `scripts/vendor.mjs` | Copies `transformers.min.js` (self-contained build; the `.web` build has bare imports) and ORT `asyncify` wasm into `vendor/`, downloads the model. Runs on `npm install`. `vendor/` is gitignored. |
 | `scripts/eval-ner.mjs` + `tests/eval/samples.js` | Detection-quality eval in Node (`npm run eval`). |
+| `scripts/package.mjs` | Builds `dist/local-ai-anonymizer-<version>.zip` (manifest, icons, src, vendor). Fails if manifest and package.json versions differ. |
 | `src/background/state.js` | Settings (`storage.local`), vault (`storage.session`), vault mutex, worker keep-alive |
 | `src/background/integrations.js` | Dynamic DNR rule that strips `Origin` on requests to the model host (scoped to `initiatorDomains: [extension id]` so pages cannot abuse it), custom-site content script registration, badge |
 | `src/popup/` | Manual anonymize / restore UI and on/off toggle |
@@ -31,7 +34,14 @@ The user chose the smaller English-only model over a multilingual one (2026-10-2
 - The vault is immutable: every core function returns a new vault object.
 - Regex (validated) spans win over LLM spans when they overlap; longer spans win over shorter ones.
 - If the local model fails, fall back to pattern-only detection and tell the user in the toast (configurable to cancel the paste instead).
-- Content script runs at `document_start` so its window capture-phase paste listener is registered before any page script.
+- Content script runs at `document_start` so its window capture-phase paste and drop listeners are registered before any page script.
+- Every text paste on a protected site is intercepted, not just pastes into text boxes: sites like chat.mistral.ai route page-wide pastes into the composer. Non-editable targets get the anonymized text re-dispatched as a synthetic event.
+- Gemini uses Quill 1.x, which mishandles synthetic paste; `.ql-editor` targets are filled with execCommand line by line.
+- Live-site checks use real keyboard pastes (clipboard + Ctrl/Cmd+V); synthetic paste tests missed the Mistral leak.
+- Drop interception skips only trusted drags that started inside a text box on the page and carry exactly the dragged text (`pageDrag`); never trust untrusted dragstart/dragend.
+- Paste/drop text comes from `transferText`: text/plain, else text/html via inert DOMParser, else text/uri-list. Non-text form fields (password, number, date) return before reading the clipboard.
+- Name parts (`span.aliasOf`, source `alias`) rank below model spans; known vault values skip values under 3 chars and `NEVER_ENTITIES`, and only apply when `useModel` is on.
+- minimum_chrome_version 128 (caretPositionFromPoint, matchOriginAsFallback).
 - `[hidden] { display: none !important }` in `src/ui/theme.css` is load-bearing: component `display` rules otherwise override `hidden`.
 - No em dashes in copy or docs (user preference).
 - MV3 forbids remote code: Transformers.js defaults `wasmPaths` to the jsdelivr CDN, so offscreen.js must point it at `vendor/ort/`. CSP needs `'wasm-unsafe-eval'`.
@@ -46,6 +56,8 @@ npm run coverage    # tests with coverage report
 npm run test:e2e    # real Chromium + extension + real built-in model (needs vendor/ and port 11434 free)
 npm run vendor      # rebuild vendor/ (runtime + model)
 npm run eval        # detection quality per model
+npm run lint        # ESLint (flat config; content scripts are classic scripts)
+npm run package     # release zip in dist/ (EXTENSION_PATH=<unzipped> npm run test:e2e to check it)
 python3 scripts/make-icons.py   # regenerate icons/
 ```
 

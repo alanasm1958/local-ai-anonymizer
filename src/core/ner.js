@@ -9,6 +9,8 @@ export const BUILTIN_MODEL = Object.freeze({
   revision: '3a19fe9404a4469d91aa3d551558a97f68872f67', // pinned: vendor.mjs downloads exactly this
   dtype: 'q8',
   file: 'onnx/model_quantized.onnx',
+  // Everything the runtime loads; vendor.mjs downloads these, package.mjs checks them.
+  files: Object.freeze(['config.json', 'tokenizer.json', 'tokenizer_config.json', 'special_tokens_map.json', 'onnx/model_quantized.onnx']),
   label: 'DistilBERT-NER (English)',
   sizeMb: 66,
 });
@@ -35,7 +37,7 @@ const LEADING_NOISE = new Set([
 // Exact strings the model tends to tag but that identify nobody: form field
 // labels, role and domain acronyms, everyday software. Seen in the eval set
 // ("DOB" as a place, "KYC"/"ECG" as organizations, "Excel" as a company).
-const NEVER_ENTITIES = new Set([
+export const NEVER_ENTITIES = new Set([
   'DOB', 'SSN', 'MRN', 'IBAN', 'PIN', 'ID', 'NHS', 'VAT', 'EIN', 'TIN',
   'KYC', 'AML', 'ECG', 'EKG', 'MRI', 'ICU', 'ER', 'GP',
   'CEO', 'CFO', 'CTO', 'COO', 'CIO', 'VP', 'HR', 'IT', 'QA', 'PM', 'PR', 'R&D',
@@ -107,13 +109,26 @@ function group(text, located) {
   return groups;
 }
 
-// "O'Brien" + "-" (tagged O) + "Gonzalez" is one name: rejoin same-type
-// groups separated only by a single joiner character.
-function mergeJoined(text, groups) {
+const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
+
+// Two adjacent groups that are really one entity:
+// - "O'Brien" + "-" (tagged O) + "Gonzalez": same type across a joiner.
+// - "Northwind" (LOC) + "Traders" (ORG), "Leeds" + "City Council": a place
+//   name directly in front of an organization is part of its name. Only when
+//   both halves are confident on their own (so a weak ORG can't ride on a
+//   strong LOC) and organizations are wanted (else the place would vanish).
+function belongsTogether(text, prev, g, { minScore, mergePlaces }) {
+  const gap = text.slice(prev.end, g.start);
+  if (prev.kind === g.kind) return JOINER.test(gap);
+  return mergePlaces && prev.kind === 'LOC' && g.kind === 'ORG' && gap === ' '
+    && mean(prev.scores) >= minScore && mean(g.scores) >= minScore;
+}
+
+function mergeJoined(text, groups, options) {
   return groups.reduce((acc, g) => {
     const prev = acc.at(-1);
-    if (prev && prev.kind === g.kind && JOINER.test(text.slice(prev.end, g.start))) {
-      return [...acc.slice(0, -1), { ...prev, end: g.end, scores: [...prev.scores, ...g.scores] }];
+    if (prev && belongsTogether(text, prev, g, options)) {
+      return [...acc.slice(0, -1), { ...prev, kind: g.kind, end: g.end, scores: [...prev.scores, ...g.scores] }];
     }
     return [...acc, g];
   }, []);
@@ -128,11 +143,12 @@ function trimLeadingNoise(text, start, end) {
   }
 }
 
-const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
-
-export function alignTokens(text, tokens, { offset = 0, minScore = NER_MIN_SCORE } = {}) {
+// `types` (optional): entity types the caller wants; used to decide whether a
+// place may be folded into a following organization name.
+export function alignTokens(text, tokens, { offset = 0, minScore = NER_MIN_SCORE, types } = {}) {
   if (!text) return [];
-  return mergeJoined(text, group(text, locate(text, tokens)))
+  const mergePlaces = !types || types.includes('ORGANIZATION');
+  return mergeJoined(text, group(text, locate(text, tokens)), { minScore, mergePlaces })
     .filter((g) => LABEL_TO_TYPE[g.kind] && mean(g.scores) >= minScore)
     .map((g) => {
       const start = trimLeadingNoise(text, g.start, g.end);
@@ -160,7 +176,7 @@ export async function detectWithModel(text, runModel, types, { countTokens, maxT
   for (const sized of chunkText(text, NER_CHUNK_CHARS)) {
     for (const chunk of await fitToModel(sized, countTokens, maxTokens)) {
       const tokens = await runModel(chunk.text);
-      found.push(...alignTokens(chunk.text, tokens).filter((e) => types.includes(e.type)));
+      found.push(...alignTokens(chunk.text, tokens, { types }).filter((e) => types.includes(e.type)));
     }
   }
   const unique = new Map(found.map((e) => [`${e.type}:${e.text}`, { text: e.text, type: e.type }]));

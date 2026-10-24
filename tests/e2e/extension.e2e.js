@@ -12,7 +12,8 @@ import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 import { startMockOllama } from '../helpers/mock-ollama.js';
 
-const EXTENSION_PATH = fileURLToPath(new URL('../../', import.meta.url));
+// EXTENSION_PATH lets the suite run against an unzipped release package.
+const EXTENSION_PATH = process.env.EXTENSION_PATH ?? fileURLToPath(new URL('../../', import.meta.url));
 const OLLAMA_PORT = 11434;
 
 // A textarea, a ProseMirror-like editor that handles paste itself, and a
@@ -23,11 +24,21 @@ const FAKE_CHAT_PAGE = `<!doctype html><html><body>
   <div id="bare" contenteditable="true" style="min-height:60px;border:1px solid #ccc"></div>
   <chat-box id="shadow-host"></chat-box>
   <div id="reply"></div>
+  <input id="pw" type="password">
   <script>
     customElements.define('chat-box', class extends HTMLElement {
       constructor() { super(); this.attachShadow({ mode: 'open' }).innerHTML = '<textarea id="inner"></textarea>'; }
     });
     window.pageSawRawPaste = false;
+    // "Paste anywhere": like chat.mistral.ai, a page-wide handler routes pastes
+    // that don't target a text box into the composer.
+    document.addEventListener('paste', (e) => {
+      if (e.defaultPrevented || e.target.closest?.('input, textarea, [contenteditable="true"]')) return;
+      const text = e.clipboardData.getData('text/plain');
+      if (text.includes('Maria Gonzalez')) window.pageSawRawPaste = true;
+      e.preventDefault();
+      document.getElementById('plain').value += text;
+    });
     document.getElementById('rich').addEventListener('paste', (e) => {
       e.preventDefault();
       const text = e.clipboardData.getData('text/plain');
@@ -37,14 +48,35 @@ const FAKE_CHAT_PAGE = `<!doctype html><html><body>
     // A chat reply rendered by the page, and a React-style in-place update.
     window.showReply = (text) => { document.getElementById('reply').textContent = text; };
     window.rewriteReply = (text) => { document.getElementById('reply').firstChild.nodeValue = text; };
+    // Text dragged in from another app or tab.
+    window.fireDrop = (id, text) => {
+      const el = document.getElementById(id);
+      const rect = el.getBoundingClientRect();
+      const data = new DataTransfer();
+      data.setData('text/plain', text);
+      el.dispatchEvent(new DragEvent('drop', {
+        dataTransfer: data, bubbles: true, cancelable: true, composed: true,
+        clientX: rect.left + 5, clientY: rect.top + 5,
+      }));
+    };
     window.firePaste = (id, text) => {
       const el = id === 'inner'
         ? document.getElementById('shadow-host').shadowRoot.getElementById('inner')
-        : document.getElementById(id);
+        : id === 'body' ? document.body : document.getElementById(id);
       el.focus();
       const data = new DataTransfer();
       data.setData('text/plain', text);
       // composed: true like a real user paste, so it crosses shadow boundaries.
+      const event = new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true, composed: true });
+      el.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    // Clipboard with only rich text (no text/plain), e.g. from some editors.
+    window.firePasteHtml = (id, html) => {
+      const el = document.getElementById(id);
+      el.focus();
+      const data = new DataTransfer();
+      data.setData('text/html', html);
       el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true, composed: true }));
     };
   </script>
@@ -147,6 +179,90 @@ test('bare contenteditable falls back to insertText', async () => {
   await page.evaluate((t) => window.firePaste('bare', t), SECRET_TEXT);
   await page.waitForFunction(() => document.getElementById('bare').textContent.includes('[PERSON_1]'), null, { timeout: 30000 });
   assertClean(await page.textContent('#bare'));
+  await page.close();
+});
+
+test('paste outside any text box is anonymized before a page-wide handler sees it', async () => {
+  const page = await openChat();
+  await page.evaluate((t) => window.firePaste('body', t), SECRET_TEXT);
+  await page.waitForFunction(() => /\[PERSON_\d+\]/.test(document.getElementById('plain').value), null, { timeout: 30000 });
+  assertClean(await page.inputValue('#plain'));
+  assert.equal(await page.evaluate(() => window.pageSawRawPaste), false, 'page-wide handler saw the raw text');
+  await page.close();
+});
+
+test('text dropped into a text box is anonymized', async () => {
+  const page = await openChat();
+  await page.evaluate((t) => window.fireDrop('plain', t), SECRET_TEXT);
+  await page.waitForFunction(() => /\[PERSON_\d+\]/.test(document.getElementById('plain').value), null, { timeout: 30000 });
+  assertClean(await page.inputValue('#plain'));
+  await page.evaluate((t) => window.fireDrop('bare', t), SECRET_TEXT);
+  await page.waitForFunction(() => /\[PERSON_\d+\]/.test(document.getElementById('bare').textContent), null, { timeout: 30000 });
+  assertClean(await page.textContent('#bare'));
+  await page.close();
+});
+
+// Same message the context menu and the Alt+Shift+A command send to the
+// active tab.
+async function runActionInTab(page, action, scope) {
+  await page.bringToFront();
+  await worker.evaluate(async ({ a, sc }) => {
+    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    await chrome.tabs.sendMessage(tab.id, { type: 'runAction', action: a, scope: sc });
+  }, { a: action, sc: scope });
+}
+
+test('Alt+Shift+A anonymizes the whole focused text box', async () => {
+  const page = await openChat();
+  await page.evaluate((t) => { const el = document.getElementById('plain'); el.value = t; el.focus(); el.setSelectionRange(0, 0); }, SECRET_TEXT);
+  await runActionInTab(page, 'anonymize', 'field');
+  await page.waitForFunction(() => /\[PERSON_\d+\]/.test(document.getElementById('plain').value), null, { timeout: 30000 });
+  assertClean(await page.inputValue('#plain'));
+  await page.close();
+});
+
+test('right-click restore shows real values for the selected reply, outside the page DOM', async () => {
+  const page = await openChat();
+  const placeholder = await worker.evaluate(async () => {
+    const { vault } = await chrome.storage.session.get('vault');
+    return Object.entries(vault.byPlaceholder).find(([, v]) => v === 'Maria Gonzalez')[0];
+  });
+  await page.evaluate((p) => {
+    window.showReply(`Please call ${p} tomorrow.`);
+    const range = document.createRange();
+    range.selectNodeContents(document.getElementById('reply'));
+    getSelection().removeAllRanges();
+    getSelection().addRange(range);
+  }, placeholder);
+  await runActionInTab(page, 'restore', 'selection');
+  await page.waitForTimeout(800);
+  assert.match(await visibleText(page), /Please call Maria Gonzalez tomorrow\./);
+  const pageReadable = await page.evaluate(() => document.body.innerText);
+  assert.equal(pageReadable.includes('Maria Gonzalez'), false);
+  await page.close();
+});
+
+test('a page faking dragstart cannot switch off drop protection', async () => {
+  const page = await openChat();
+  await page.evaluate(() => { document.getElementById('bare').textContent = ''; window.dispatchEvent(new Event('dragstart')); });
+  await page.evaluate((t) => window.fireDrop('bare', t), SECRET_TEXT);
+  await page.waitForFunction(() => /\[PERSON_\d+\]/.test(document.getElementById('bare').textContent), null, { timeout: 30000 });
+  assertClean(await page.textContent('#bare'));
+  await page.close();
+});
+
+test('rich-text-only paste is converted to text and anonymized', async () => {
+  const page = await openChat();
+  await page.evaluate(() => window.firePasteHtml('bare', '<p><b>Maria Gonzalez</b> from Northwind Traders</p><p>maria@northwind.example, card 4111 1111 1111 1111</p>'));
+  await page.waitForFunction(() => /\[PERSON_\d+\]/.test(document.getElementById('bare').textContent), null, { timeout: 30000 });
+  assertClean(await page.textContent('#bare'));
+  await page.close();
+});
+
+test('paste into a password field is left to the browser', async () => {
+  const page = await openChat();
+  const prevented = await page.evaluate(() => window.firePaste('pw', 'hunter2-secret-pass'));
+  assert.equal(prevented, false, 'the extension must not swallow password pastes');
   await page.close();
 });
 

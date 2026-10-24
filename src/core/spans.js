@@ -1,6 +1,7 @@
 // Overlap resolution for detected spans: { start, end, type, value, source }.
 
-const SOURCE_RANK = Object.freeze({ pattern: 0, model: 1 });
+// alias = a lone part of a known name; ranks below what the model itself found.
+const SOURCE_RANK = Object.freeze({ pattern: 0, model: 1, alias: 2 });
 
 // When two pattern spans cover the same text, the more specific type wins.
 const TYPE_RANK = Object.freeze([
@@ -14,7 +15,7 @@ const typeRank = (type) => {
 };
 
 const compareByPriority = (a, b) =>
-  (SOURCE_RANK[a.source] ?? 2) - (SOURCE_RANK[b.source] ?? 2)
+  (SOURCE_RANK[a.source] ?? 3) - (SOURCE_RANK[b.source] ?? 3)
   || (b.end - b.start) - (a.end - a.start)
   || typeRank(a.type) - typeRank(b.type)
   || a.start - b.start;

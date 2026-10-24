@@ -19,7 +19,6 @@ const COPIES = [
   ['onnxruntime-web/dist/ort-wasm-simd-threaded.asyncify.wasm', 'ort/ort-wasm-simd-threaded.asyncify.wasm'],
 ];
 
-const MODEL_FILES = ['config.json', 'tokenizer.json', 'tokenizer_config.json', 'special_tokens_map.json', BUILTIN_MODEL.file];
 
 const exists = (path) => stat(path).then(() => true, () => false);
 
@@ -42,7 +41,7 @@ async function download(url, target) {
 }
 
 async function downloadModel() {
-  for (const file of MODEL_FILES) {
+  for (const file of BUILTIN_MODEL.files) {
     const target = join(VENDOR, 'models', BUILTIN_MODEL.id, file);
     if (await exists(target)) {
       console.log(`have ${file}`);

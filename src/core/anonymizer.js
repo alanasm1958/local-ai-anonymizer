@@ -7,10 +7,16 @@ import { entitiesToSpans } from './llm.js';
 import { resolveSpans } from './spans.js';
 import { assignPlaceholders, PLACEHOLDER_RE } from './vault.js';
 import { enabledTypes } from './settings.js';
+import { nameAliasSpans, partOwners } from './names.js';
+import { NEVER_ENTITIES } from './ner.js';
+
+const MIN_KNOWN_LENGTH = 3;
 
 export function applySpans(text, spans, vault, { site } = {}) {
   const resolved = resolveSpans(spans);
-  const { vault: nextVault, placeholders } = assignPlaceholders(vault, resolved, { site });
+  // A lone "Maria" gets the placeholder of the full name it came from.
+  const items = resolved.map((span) => ({ type: span.type, value: span.aliasOf ?? span.value }));
+  const { vault: nextVault, placeholders } = assignPlaceholders(vault, items, { site });
   // Local buffer, joined once: linear even for pastes with thousands of hits.
   const parts = [];
   let cursor = 0;
@@ -50,12 +56,35 @@ function placeholderRanges(text) {
 
 const insideAny = (span, ranges) => ranges.some((r) => span.start < r.end && r.start < span.end);
 
-async function modelSpans(text, settings, detectEntities) {
+async function detectWithModel(text, settings, detectEntities) {
   const types = enabledTypes(settings.modelTypes);
   if (!settings.useModel || types.length === 0) return [];
-  const entities = (await detectEntities(text, types)).filter((e) => types.includes(e.type));
+  return (await detectEntities(text, types)).filter((e) => types.includes(e.type));
+}
+
+const typeOf = (placeholder) => /^\[([A-Z][A-Z_]*?)_\d+\]$/.exec(placeholder)?.[1];
+
+// Values found earlier in this session, of types still enabled. Short values
+// and stoplisted words are skipped: one mis-tag ("IT" as a company) must not
+// redact that word for the rest of the session.
+function knownEntities(vault, settings) {
+  if (!settings.useModel) return [];
+  return Object.entries(vault.byPlaceholder)
+    .map(([placeholder, value]) => ({ text: value, type: typeOf(placeholder) }))
+    .filter((e) => settings.modelTypes[e.type] === true
+      && e.text.length >= MIN_KNOWN_LENGTH && !NEVER_ENTITIES.has(e.text));
+}
+
+// Model spans plus exact repeats of known values plus lone name parts.
+function entitySpans(text, settings, vault, found) {
+  const candidates = [...found, ...knownEntities(vault, settings)];
+  const owners = partOwners(candidates.filter((e) => e.type === 'PERSON').map((e) => e.text));
+  // A lone "Maria" the model tagged itself is the known Maria Gonzalez, not
+  // a new person: let the alias span (full name's placeholder) handle it.
+  const isKnownPart = (e) => e.type === 'PERSON' && Boolean(owners.get(e.text.trim()));
   const reserved = placeholderRanges(text);
-  return entitiesToSpans(text, entities).filter((s) => !insideAny(s, reserved));
+  return [...entitiesToSpans(text, candidates.filter((e) => !isKnownPart(e))), ...nameAliasSpans(text, owners)]
+    .filter((s) => !insideAny(s, reserved));
 }
 
 // `site` is the host the text is being pasted into (omit for extension pages).
@@ -64,14 +93,15 @@ export async function anonymize(text, { settings, vault, detectEntities, site })
 
   const patternSpans = detectPatterns(text, settings.patternTypes);
   const warnings = [];
-  let fromModel = [];
+  let found = [];
   try {
-    fromModel = await modelSpans(text, settings, detectEntities);
+    found = await detectWithModel(text, settings, detectEntities);
   } catch (err) {
     if (settings.onModelError === 'cancel') throw err;
     warnings.push(`Local model unavailable, only patterns were used: ${err.message}`);
   }
 
-  const result = applySpans(text, [...patternSpans, ...fromModel], vault, { site });
+  const spans = [...patternSpans, ...entitySpans(text, settings, vault, found)];
+  const result = applySpans(text, spans, vault, { site });
   return { ...result, warnings };
 }

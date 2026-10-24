@@ -5,8 +5,9 @@ import { vaultSize } from '../core/vault.js';
 
 const ORIGIN_RULE_ID = 1;
 const CUSTOM_SCRIPT_ID = 'custom-sites';
-// reveal.js must load first: content.js picks it up from the shared isolated world.
-const CONTENT_SCRIPTS = ['src/content/reveal.js', 'src/content/content.js'];
+// toast.js and reveal.js must load first: content.js picks them up from the
+// shared isolated world.
+const CONTENT_SCRIPTS = ['src/content/toast.js', 'src/content/reveal.js', 'src/content/content.js'];
 
 // Settings can be saved from several pages at once and the worker also syncs
 // on startup; chaining keeps unregister/register pairs from interleaving.
@@ -70,6 +71,8 @@ async function applyCustomSites(settings) {
     js: CONTENT_SCRIPTS,
     runAt: 'document_start',
     allFrames: true,
+    // about:blank and srcdoc frames inherit the site's origin; cover them too.
+    matchOriginAsFallback: true,
     persistAcrossSessions: true,
   }]);
 }
