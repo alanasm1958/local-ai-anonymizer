@@ -149,7 +149,7 @@
         <li>Download a model: <code>ollama pull llama3.2</code></li>
         <li>Choose <strong>Ollama</strong> as the engine above, save, then press <strong>Test detection</strong>.</li>
       </ol>
-      <p class="muted">If the test says HTTP 403, quit Ollama and start it with <code>OLLAMA_ORIGINS="chrome-extension://*" ollama serve</code>.</p>
+      <p class="muted">If the test says HTTP 403, set the environment variable <code>OLLAMA_ORIGINS</code> to <code>chrome-extension://*</code> and restart Ollama. On a Mac: <code>launchctl setenv OLLAMA_ORIGINS "chrome-extension://*"</code>. On Windows (PowerShell): <code>setx OLLAMA_ORIGINS "chrome-extension://*"</code>.</p>
     </section>
   </div>
   <script type="module" src="options.js"></script>

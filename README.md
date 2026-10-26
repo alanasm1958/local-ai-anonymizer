@@ -38,45 +38,70 @@ The sample set was also used to tune the extension, so expect real-world numbers
 
 ## Install
 
-Works in Chrome, Edge and Brave version 128 or newer. You need Node.js 20 or newer for the one-time setup.
+Works on **Windows, macOS and Linux** in Chrome, Edge and Brave version 128 or newer. Every change is tested on Windows and macOS by GitHub Actions.
+
+### From the release zip (no setup)
+
+1. Unzip `local-ai-anonymizer-<version>.zip`.
+2. Open `chrome://extensions` (or `edge://extensions`, `brave://extensions`).
+3. Turn on **Developer mode**.
+4. Click **Load unpacked** and pick the unzipped folder.
+5. Open the extension's **Settings** and press **Test detection**. It should answer in well under a second.
+
+### From source
+
+You need [Node.js](https://nodejs.org) 22 or newer.
 
 ```bash
 npm install
 ```
 
-`npm install` also runs `npm run vendor`, which copies the model runtime into `vendor/` and downloads the model (about 90 MB in total) so the extension works fully offline afterwards.
+`npm install` also runs `npm run vendor`, which copies the model runtime into `vendor/` and downloads the model (about 90 MB in total) so the extension works fully offline afterwards. Then load this folder with **Load unpacked** as above.
 
-Then load it:
-
-1. Open `chrome://extensions` (or `edge://extensions`, `brave://extensions`).
-2. Turn on **Developer mode**.
-3. Click **Load unpacked** and pick this folder.
-4. Open the extension's **Settings** and press **Test detection**. It should answer in well under a second.
-
-To share it with others, build a self-contained zip (about 56 MB) that they can unzip and load the same way:
+To share it with others, build the zip (about 57 MB):
 
 ```bash
 npm run package
 ```
 
-The zip lands in `dist/` and contains only the manifest, icons, source and the bundled model.
+The zip lands in `dist/` and contains only the manifest, icons, source and the bundled model. It is byte-identical for the same sources on any platform.
+
+### Keyboard shortcut
+
+`Alt+Shift+A` on Windows and Linux, `Option+Shift+A` on a Mac. Change it at `chrome://extensions/shortcuts` (or `edge://extensions/shortcuts`).
 
 ### Optional: Ollama
 
-The built-in model handles names, companies and places. For a larger model that also understands addresses and case numbers written in free text:
+The built-in model handles names, companies and places. For a larger model that also understands addresses and case numbers written in free text, install Ollama and download a model.
+
+**macOS:**
 
 ```bash
 brew install ollama
 ```
 
+**Windows:** run the installer from [ollama.com/download](https://ollama.com/download).
+
+Then, on either:
+
 ```bash
 ollama pull llama3.2
 ```
 
-Then pick **Ollama** as the engine in Settings. LM Studio, llama.cpp server and vLLM work too via **OpenAI-compatible**. If the test reports HTTP 403, start Ollama with:
+Pick **Ollama** as the engine in Settings. LM Studio, llama.cpp server and vLLM work too via **OpenAI-compatible**.
+
+If the test reports HTTP 403, Ollama is refusing the extension. Allow it, then restart Ollama.
+
+**macOS:**
 
 ```bash
-OLLAMA_ORIGINS="chrome-extension://*" ollama serve
+launchctl setenv OLLAMA_ORIGINS "chrome-extension://*"
+```
+
+**Windows (PowerShell):**
+
+```powershell
+setx OLLAMA_ORIGINS "chrome-extension://*"
 ```
 
 ## Using it

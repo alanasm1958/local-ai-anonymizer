@@ -550,7 +550,9 @@ test('the extension makes no outbound network requests', () => {
   // extension: Chrome's own background services, and the connection Chrome
   // opens to the fake AI sites before context.route serves them. Any other
   // host (a model hub, a CDN, an analytics endpoint) fails the test.
-  const BROWSER_OR_TEST = /(^|\.)(google\.com|googleapis\.com|gstatic\.com|chatgpt\.com|claude\.ai)(:\d+)?$/;
+  // Chromium's own services also use gvt1/gvt2 (component updater) and
+  // googleusercontent on fresh CI machines.
+  const BROWSER_OR_TEST = /(^|\.)(google\.com|googleapis\.com|gstatic\.com|gvt1\.com|gvt2\.com|googleusercontent\.com|chatgpt\.com|claude\.ai)(:\d+)?$/;
   const unexpected = [...new Set(proxy.hosts)].filter((host) => !BROWSER_OR_TEST.test(host));
   assert.deepEqual(unexpected, [], `unexpected outbound hosts: ${unexpected.join(', ')}`);
 });

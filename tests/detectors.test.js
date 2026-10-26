@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { budget } from './helpers/timing.js';
 import { detectPatterns, luhnValid, ibanValid, isIPv6 } from '../src/core/detectors.js';
 
 const ALL = {
@@ -127,7 +128,7 @@ test('pathological 200k inputs finish quickly (no ReDoS)', () => {
   for (const input of ['a.'.repeat(100000), '12-'.repeat(66000), `a@${'b.'.repeat(100000)}`, 'a-'.repeat(100000)]) {
     const started = Date.now();
     detectPatterns(input, { ...ALL, ...EXTRA });
-    assert.ok(Date.now() - started < 1500, `took ${Date.now() - started}ms on ${input.slice(0, 6)}...`);
+    assert.ok(Date.now() - started < budget(1500), `took ${Date.now() - started}ms on ${input.slice(0, 6)}...`);
   }
 });
 
@@ -191,6 +192,6 @@ test('keyword gaps cannot be stretched into quadratic backtracking', () => {
   for (const input of [`id${' '.repeat(100000)}x`, `born${' '.repeat(100000)}x`, `1${' '.repeat(100000)}x`, `Passport No.${' '.repeat(100000)}x`]) {
     const started = Date.now();
     detectPatterns(input, { ...ALL, ...EXTRA });
-    assert.ok(Date.now() - started < 500, `took ${Date.now() - started}ms on ${input.slice(0, 8)}...`);
+    assert.ok(Date.now() - started < budget(500), `took ${Date.now() - started}ms on ${input.slice(0, 8)}...`);
   }
 });

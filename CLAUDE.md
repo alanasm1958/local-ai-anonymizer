@@ -28,7 +28,8 @@ The user chose the smaller English-only model over a multilingual one (2026-10-2
 | `scripts/vendor.mjs` | Copies `transformers.min.js` (self-contained build; the `.web` build has bare imports) and ORT `asyncify` wasm into `vendor/`, downloads the model. Runs on `npm install`. `vendor/` is gitignored. |
 | `scripts/eval-ner.mjs` + `tests/eval/samples.js` | Detection-quality eval in Node (`npm run eval`). |
 | `store/` | Chrome Web Store submission: listing, privacy policy (md + html), permission and data-use answers, checklist, images (`npm run store-assets` via `scripts/store-assets.mjs`). Claims there must stay true to the code; re-check after behavior changes. |
-| `scripts/package.mjs` | Builds `dist/local-ai-anonymizer-<version>.zip` (manifest, icons, src, vendor). Fails if manifest and package.json versions differ. |
+| `scripts/package.mjs` | Builds `dist/local-ai-anonymizer-<version>.zip` (manifest, icons, src, vendor) with fflate and fixed timestamps. Fails if manifest and package.json versions differ. |
+| `.github/workflows/ci.yml` | Windows + macOS: lint, unit, e2e, package, e2e against the extracted zip. |
 | `src/background/state.js` | Settings (`storage.local`), vault (`storage.session`), vault mutex, worker keep-alive |
 | `src/background/integrations.js` | Dynamic DNR rule that strips `Origin` on requests to the model host (scoped to `initiatorDomains: [extension id]` so pages cannot abuse it), custom-site content script registration, badge |
 | `src/popup/` | Manual anonymize / restore UI and on/off toggle |
@@ -58,6 +59,7 @@ The user chose the smaller English-only model over a multilingual one (2026-10-2
 - e2e routes the browser through `tests/helpers/recording-proxy.js`; Playwright forces loopback through any proxy unless localhost is in the bypass list.
 - `[hidden] { display: none !important }` in `src/ui/theme.css` is load-bearing: component `display` rules otherwise override `hidden`.
 - No em dashes in copy or docs (user preference).
+- Cross-platform (Windows CI runs every change): npm script globs use escaped double quotes (cmd.exe keeps single quotes literally); no shell tools in scripts (packaging and extraction use fflate); zip entry names use "/"; `.gitattributes` forces LF; performance tests use `budget(ms)` from `tests/helpers/timing.js` (4x on CI).
 - MV3 forbids remote code: Transformers.js defaults `wasmPaths` to the jsdelivr CDN, so offscreen.js must point it at `vendor/ort/`. CSP needs `'wasm-unsafe-eval'`.
 - Real values must never enter the AI page's DOM. Keep reveal output inside closed shadow roots and test with the e2e `pageReadable` check.
 - Reveal is also a layout side channel (the page can measure the rendered width). Mitigations, all load-bearing: the vault records `sites` per placeholder and `lookup` only answers for the sender's own site (`lookupForSite`); `isRevealable` excludes secret types; reveal.js renders with unquoted generic `monospace` and `all: initial` so page CSS and @font-face can't control glyph widths.
@@ -71,7 +73,8 @@ npm run test:e2e    # real Chromium + extension + real built-in model (needs ven
 npm run vendor      # rebuild vendor/ (runtime + model)
 npm run eval        # detection quality per model
 npm run lint        # ESLint (flat config; content scripts are classic scripts)
-npm run package     # release zip in dist/ (EXTENSION_PATH=<unzipped> npm run test:e2e to check it)
+npm run package     # release zip in dist/, reproducible (EXTENSION_PATH=<unzipped> npm run test:e2e to check it)
+node scripts/extract-zip.mjs <dir>   # extract the release zip (any OS)
 python3 scripts/make-icons.py   # regenerate icons/
 ```
 

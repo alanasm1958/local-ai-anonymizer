@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { budget } from './helpers/timing.js';
 import { resolveSpans } from '../src/core/spans.js';
 import { applySpans, restoreText, anonymize } from '../src/core/anonymizer.js';
 import { createVault } from '../src/core/vault.js';
@@ -100,7 +101,7 @@ test('anonymize scales linearly on a 10k-email paste', async () => {
   const settings = { ...DEFAULT_SETTINGS, useModel: false };
   const started = Date.now();
   const result = await anonymize(text, { settings, vault: createVault(), detectEntities: async () => [] });
-  assert.ok(Date.now() - started < 2000, `took ${Date.now() - started}ms`);
+  assert.ok(Date.now() - started < budget(2000), `took ${Date.now() - started}ms`);
   assert.match(result.text, /\[EMAIL_10000\]$/);
 });
 
