@@ -4,7 +4,7 @@
 
 import { chunkText } from './llm.js';
 import { truecase } from './truecase.js';
-import { completePersons, completeOrganizations, miscAsPerson, knownWordCheck } from './name-parts.js';
+import { completePersons, completeOrganizations, fieldNames, miscAsPerson, knownWordCheck } from './name-parts.js';
 
 export const BUILTIN_MODEL = Object.freeze({
   id: 'onnx-community/distilbert-NER-ONNX',
@@ -58,7 +58,13 @@ export const NEVER_ENTITIES = new Set([
   // Tagged as places or companies, typed or truecased ("Kubernetes" 0.91 LOC).
   'Docker', 'Kubernetes', 'Postgres', 'PostgreSQL', 'MySQL', 'MongoDB', 'Redis', 'Grafana', 'Figma',
   'Linux', 'Android',
+  'Docker Compose', 'Compose', 'Google Drive', 'Google Docs', 'Google Sheets', 'Google Meet', 'Microsoft Teams', 'VS Code',
+  'Visual Studio', 'GitHub Actions', 'Power BI', 'Canva', 'Trello', 'Asana', 'WhatsApp', 'Telegram', 'Moodle', 'Blackboard',
+  'Coursera', 'LinkedIn',
   'Passport',
+  // ID keywords: found live on ChatGPT, "CIN" in a CSV row was hidden as a
+  // person and, saved in the vault, hidden in every later paste.
+  'CIN', 'CNIE', 'Iqama', 'Civil ID', 'National ID', 'Emirates ID', 'Emirates', 'NID',
   // Greetings the model reads as names ("Ramadan Kareem" came back PER 0.99).
   'Ramadan', 'Ramadan Kareem', 'Ramadan Mubarak', 'Eid', 'Eid Mubarak', 'Eid Saeed', 'Inshallah', 'Insha Allah',
   'Mashallah', 'Alhamdulillah', 'Habibi', 'Yalla', 'Salam', 'Assalamu Alaikum', 'Marhaba', 'Shukran',
@@ -216,7 +222,9 @@ export function alignTokens(text, tokens, { offset = 0, minScore = NER_MIN_SCORE
   return completeNames(text, merged, located, isKnownWord)
     .filter((g) => LABEL_TO_TYPE[g.kind])
     .map((g) => {
-      const start = trimLeadingNoise(text, g.start, g.end);
+      // The model can start a name on the dot of "Prof." (". Abu Bakr").
+      const lead = /^[\s.,;:'"()-]*/.exec(text.slice(g.start, g.end))[0].length;
+      const start = trimLeadingNoise(text, g.start + lead, g.end);
       const end = trimEmailLocal(text, start, g.end);
       return { kind: g.kind, text: text.slice(start, end), start, end, score: mean(g.scores) };
     })
@@ -238,7 +246,8 @@ function completeNames(text, groups, located, isKnownWord) {
   const isProperNoun = (word) => !isKnownWord(word.toLowerCase());
   const strong = (g) => mean(g.scores) >= NER_MIN_SCORE && g.kind !== 'MISC';
   const people = completePersons(text, groups.map(miscAsPerson(text, isKnown, isNoise)), { isProperNoun, labelled, isNoise, strong });
-  return completeOrganizations(text, people);
+  const fielded = fieldNames(text, people, { isProperNoun, isNoise, strong });
+  return completeOrganizations(text, fielded, { isProperNoun, isNoise });
 }
 
 // CSV/TSV: rows read together confuse the model (a header line and no spaces
@@ -301,8 +310,9 @@ async function fitToModel(chunk, countTokens, maxTokens) {
 }
 
 // Table pipes confuse the model: "| Contact | Maya Khoury |" came back ORG
-// 0.60 for "Maya", with the pipes as spaces PER 0.96. Same length.
-const withoutPipes = (text) => text.replace(/\|/g, ' ');
+// 0.60 for "Maya", with the pipes as spaces PER 0.96. Curly quotes hide
+// names too ("“Hawler”"). Same length either way.
+const withoutPipes = (text) => text.replace(/\|/g, ' ').replace(/[“”]/g, '"').replace(/[‘’]/g, "'");
 
 // Runs `runModel(chunkText)` (which returns token-classification output with
 // ignore_labels: []) over the text in sentence-sized chunks. Pass

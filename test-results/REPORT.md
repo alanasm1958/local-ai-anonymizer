@@ -67,7 +67,7 @@ The set grew from 3,475 to 3,498 cases after the fixes: 21 more ordinary sentenc
 | Card, key, IP (198) | 0 | 0 |
 
 **Other suites after the fixes:**
-- 245 unit tests pass, including 34 new ones for these rules.
+- 246 unit tests pass, including 35 new ones for these rules.
 - Lint is clean.
 - The old eval: 99.0% caught, 100% of safe phrases kept.
 - The 47 text scenarios all pass.
@@ -142,6 +142,60 @@ Smaller findings left as they are, since they behave the same as before this rou
 - **Grouping of 6-digit numbers.** The generator grouped 6-digit subscriber numbers unrealistically ("03 54 6390"). They now use real 3/3 grouping.
 - **"Program Office" no longer has to stay.** It was on the must-keep list for the signature context, and the model reads a unit name on its own line as an organization. Hiding it is allowed under "hide when unsure".
 - **A bare 6-digit local number with no phone word** is now a known gap. Without context it reads like any number.
+
+## Live check in Chrome (2026-11-08)
+
+The real extension was loaded unpacked in Alan's Chrome. Each case was a real keyboard paste (clipboard plus Cmd+V) into the message box, and the box was read back after each paste. **Nothing was sent**, and ChatGPT ran in a temporary chat.
+
+| Site | Cases | Leaks |
+|---|---|---|
+| ChatGPT | 12 | 0 |
+| Claude.ai | 6 | 0 |
+| Gemini (Quill editor) | 6 | 0 |
+
+The cases covered:
+- a phone number in Arabic-Indic digits, a CIN, and a lowercase "el-" name,
+- an ALL CAPS markdown table with Gulf and Lebanese numbers,
+- a CSV with a civil ID and a Moroccan number,
+- mIxEd-case names with a lowercase IBAN,
+- Persian digits next to an email containing a zero-width space,
+- a signature with "A. El-Sayed",
+- "Layla, Zaid" and "Odeh, Tareq",
+- Arabic ID, date of birth and phone keywords,
+- two phone numbers joined by "/",
+- addresses in lower and ALL CAPS.
+
+The ordinary sentence ("TOEFL iBT", "2024-2025", "EGP 1,250", "Ramadan Kareem", "3 hours down the road") came through untouched on all three sites.
+
+**Found live, now fixed:**
+- The keyword "CIN" in a CSV row was hidden as a person. Because the vault reuses saved values, it was then hidden in every later paste of the session.
+- ID keywords (CIN, iqama, civil ID, Emirates ID...) and "Emirates" alone are now on the never-hide list, with a stress case and a unit test.
+- This fix is not in Chrome yet. The extension needs another reload.
+
+**Test-tool trap:** macOS `pbcopy` without a UTF-8 locale turns Arabic digits into garbage ("Ÿ†ŸßŸß"), so the first live paste tested nothing. Copy with `LANG=en_US.UTF-8`.
+
+## Second round of fixes (2026-11-08)
+
+Alan asked for fixes to everything found so far. The stress suite went from **17 to 4 failures** of 3,501 cases, with no ordinary sentence hidden. Names are now **1,260 of 1,262 (99.8%)** caught, and organizations **100 of 100**.
+
+| Issue | Fix |
+|---|---|
+| Lone first name in a table cell or JSON value ("\| Contact \| Karim \|", `"contact": "Shilan"`, "assigned:Aras") | A proper noun right after a person label (name, contact, owner, student, applicant, assigned...) is a person, however unsure the model is. A person the model already found there is confirmed as is ("Sonia Ben Salah"). |
+| Lowercase company with no model tag ("our partner carthage textiles") | Up to three words ending in a company word, with at least one proper noun, is an organization. A company word now confirms a weak tag. |
+| Phone word glued to the number ("Tel0501234567", "phone_0501234567", "mob.0501234567") | Caught. |
+| Bracketed country code ("(+961) 03 123 456") | The code is part of the number now. |
+| ". " lost after "Prof." and "Eng." | A name never starts on the dot of a title. |
+| Curly quotes around a name | The model reads straight quotes instead (same length). |
+| "Docker Compose", "WhatsApp", "Google Drive" and other tools hidden as names | Added to the never-hide list. |
+| "CIN" (found live) and other ID keywords hidden as names | Added to the never-hide list. |
+
+**Still failing (4):**
+- "send the agenda to Tareq" in a bullet. There is no label, and the model is unsure.
+- "A. El-Sayed" in a signature (score 0.447, bar 0.45).
+- "Hawler" in curly quotes inside JSON.
+- "OWNER" in an ALL CAPS line, hidden as an organization.
+
+**Other suites:** 250 unit tests, 90 browser tests, all 47 scenarios and the eval (99.0% caught, 100% of safe phrases kept) all pass.
 
 ## Not done yet
 

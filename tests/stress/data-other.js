@@ -51,6 +51,7 @@ export const NEGATIVES = Object.freeze([
   { id: 'calendar', text: 'Classes run Sunday to Thursday, January to June.', keep: ['Sunday to Thursday', 'January to June'] },
   { id: 'exams', text: 'Register for the TOEFL iBT, IELTS or the GRE by Friday.', keep: ['TOEFL iBT', 'IELTS', 'GRE'] },
   { id: 'reference-words', text: 'See section 4.2 and table 3 for the case study.', keep: ['section 4.2', 'table 3', 'case study'] },
+  { id: 'id-keywords', text: 'Fields: CIN, iqama, civil ID, national ID and Emirates ID.', keep: ['CIN', 'iqama', 'civil ID', 'national ID', 'Emirates ID'] },
   { id: 'percent-table', text: '| Quarter | Growth |\n|---|---|\n| Q1 | 12% |\n| Q2 | 18% |', keep: ['Q1', '12%', 'Q2', '18%'] },
 ]);
 

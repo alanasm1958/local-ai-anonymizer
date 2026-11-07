@@ -228,7 +228,8 @@ const DETECTORS = Object.freeze([
   {
     type: 'PHONE',
     // Groups of 1 to 5 digits: "+961 3 54 6390", "00212 6 12 34 56 78".
-    regex: /(?<![\w+.])(?:\+\d{1,3}[\s.-]?)?(?:\(\d{1,4}\)[\s.-]?)?\d{1,5}(?:[ \t.-]?\d{1,5}){1,5}(?![\w]|[.:]\d)/gd,
+    // "(+961) 03 123 456": a country code in brackets is part of the number.
+    regex: /(?<![\w+.])(?:\+\d{1,3}[\s.-]?|\(\+\d{1,3}\)[\s.-]?)?(?:\(\d{1,4}\)[\s.-]?)?\d{1,5}(?:[ \t.-]?\d{1,5}){1,5}(?![\w]|[.:]\d)/gd,
     validate: phoneValid,
     shrink: true,
     // "07701234567-07801234567": two numbers run together.
@@ -238,7 +239,8 @@ const DETECTORS = Object.freeze([
     // Keyword-gated like ID_NUMBER: "my phone number is 888999000",
     // "WhatsApp me on 964 7701 234". Gaps are bounded to stay linear.
     type: 'PHONE',
-    regex: /\b(?:phone|mobile|cell(?:phone)?|tel(?:ephone)?|whats ?app|viber|fax|call me)\b\.?(?:[ \t]{1,3}(?:no\.?|number|num|#))?(?:[ \t]{1,3}(?:is|was))?(?:[ \t]{1,3}(?:me[ \t]{1,3})?(?:on|at))?[ \t]{0,3}[:#]?[ \t]{0,3}(\+?\d(?:[ .-]?\d){4,14})(?!\w)/gid,
+    // Also glued to the number: "Tel0501234567", "phone_0501234567", "mob.0501234567".
+    regex: /\b(?:phone|mobile|mob|cell(?:phone)?|tel(?:ephone)?|whats ?app|viber|fax|call me)(?:\b|(?=\d)|_)[._]?(?:[ \t]{1,3}(?:no\.?|number|num|#))?(?:[ \t]{1,3}(?:is|was))?(?:[ \t]{1,3}(?:me[ \t]{1,3})?(?:on|at))?[ \t]{0,3}[:#]?[ \t]{0,3}(\+?\d(?:[ .-]?\d){4,14})(?!\w)/gid,
     group: 1,
     validate: keywordPhoneValid,
   },

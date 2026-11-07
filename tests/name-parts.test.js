@@ -11,7 +11,7 @@ const pairs = (list) => list.map((e) => [e.text, e.type]);
 // Vocabulary stand-in: everyday words and acronyms, no regional names.
 const VOCAB = new Set(['the', 'see', 'was', 'listed', 'twice', 'in', 'section', 'two', 'contact', 'Contact', 'please',
   'follow', 'up', 'on', 'our', 'partner', 'valley', 'trading', 'co', 'excel', 'Excel', 'formulas', 'Fatima', 'NASA',
-  'ESA', 'owner', 'email', 'about', 'it', 'Monday', 'monday', 'my', 'name', 'is', 'to', 'and', 'from']);
+  'ESA', 'owner', 'email', 'about', 'it', 'Monday', 'monday', 'my', 'name', 'is', 'to', 'and', 'from', 'support', 'today']);
 const isKnownWord = (w) => VOCAB.has(w);
 const align = (text, tokens) => pairs(alignTokens(text, tokens, { isKnownWord }));
 
@@ -117,5 +117,26 @@ test('a comma join never eats the next word or a second person (review finding)'
 test('a proper noun across a comma mid-sentence is its own person, not merged', () => {
   const text = 'Thanks Layla, Zaid will join';
   const tokens = [tok('Thanks', 'O'), tok('Layla', 'O', 0.51), tok(',', 'O'), tok('Z', 'B-PER', 1), tok('##aid', 'B-PER', 1), tok('will', 'O'), tok('join', 'O')];
-  assert.deepEqual(align(text, tokens), [['Zaid', 'PERSON'], ['Layla', 'PERSON']]);
+  assert.deepEqual(align(text, tokens), [['Layla', 'PERSON'], ['Zaid', 'PERSON']]);
+});
+
+test('a proper noun after a person label is a person, however unsure the model', () => {
+  const text = '  Contact   Karim  ';
+  const tokens = [tok('Contact', 'O'), tok('Ka', 'B-PER', 0.35), tok('##rim', 'B-PER', 0.3)];
+  assert.deepEqual(align(text, tokens), [['Karim', 'PERSON']]);
+  assert.deepEqual(align('"contact": "Shilan"', [tok('"', 'O'), tok('contact', 'O'), tok('"', 'O'), tok(':', 'O'), tok('"', 'O'), tok('Shilan', 'B-MISC', 0.7), tok('"', 'O')]),
+    [['Shilan', 'PERSON']]);
+  assert.deepEqual(align('contact Support today', [tok('contact', 'O'), tok('Support', 'O'), tok('today', 'O')]), []);
+});
+
+test('lowercase company phrases with a proper noun are organizations', () => {
+  const text = 'our partner Carthage textiles';
+  const tokens = [tok('our', 'O'), tok('partner', 'O'), tok('Carthage', 'O', 0.5), tok('textiles', 'O')];
+  assert.deepEqual(align(text, tokens), [['Carthage textiles', 'ORGANIZATION']]);
+});
+
+test('a name never starts on the dot of a title', () => {
+  const text = 'Prof. Abu Bakr';
+  const tokens = [tok('Prof', 'O'), tok('.', 'B-PER', 0.6), tok('Abu', 'I-PER', 0.9), tok('Bakr', 'I-PER', 0.9)];
+  assert.deepEqual(align(text, tokens), [['Abu Bakr', 'PERSON']]);
 });

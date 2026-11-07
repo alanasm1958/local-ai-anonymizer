@@ -133,12 +133,79 @@ export function completePersons(text, spans, { isProperNoun, labelled, isNoise, 
 // three words after it is one organization, in any casing.
 const COMPANY_TAIL = /^((?:[ \t]\p{L}[\p{L}&'’-]*){0,2}[ \t](?:co|company|corp|holding|holdings|group|trading|traders|ltd|limited|llc|sarl|sal|plc|inc|textiles|logistics|consulting|engineering|pharma|media|capital|construction|bank|university|college|institute|foundation|association))(?![\p{L}\p{N}])/iu;
 
-export function completeOrganizations(text, spans) {
-  return spans.map((s) => {
+// "our partner carthage textiles": up to three words ending in a company
+// word, where at least one word is a proper noun, is an organization even
+// when the model tagged nothing. Starts at the first proper noun.
+const COMPANY_PHRASE = /(?<![\p{L}\p{N}])((?:\p{L}[\p{L}&'’-]*[ \t]){1,3})(co|company|corp|holding|holdings|group|trading|traders|ltd|limited|llc|sarl|sal|plc|inc|textiles|logistics|consulting|engineering|pharma|media|capital|construction)(?![\p{L}\p{N}])/giu;
+
+const overlaps = (spans, s, e) => spans.some((o) => s < o.end && o.start < e);
+
+function companyPhrases(text, spans, isProperNoun, isNoise) {
+  const found = [];
+  for (const m of text.matchAll(COMPANY_PHRASE)) {
+    const words = m[1].trim().split(/[ \t]+/);
+    const first = words.findIndex((w) => isProperNoun(w) && !isNoise(w));
+    if (first === -1) continue;
+    const start = m.index + m[1].indexOf(words[first]);
+    const end = m.index + m[0].length;
+    if (!overlaps(spans, start, end)) found.push({ kind: 'ORG', start, end, scores: [1] });
+  }
+  return found;
+}
+
+export function completeOrganizations(text, spans, { isProperNoun, isNoise } = {}) {
+  const tailed = spans.map((s) => {
     if (!['ORG', 'LOC'].includes(s.kind)) return s;
     const tail = COMPANY_TAIL.exec(text.slice(s.end));
-    return tail ? { ...s, kind: 'ORG', end: s.end + tail[1].length } : s;
+    // The company word is evidence of its own, like "Ltd" in orgs.js.
+    return tail ? { ...s, kind: 'ORG', end: s.end + tail[1].length, scores: [1] } : s;
   });
+  return isProperNoun ? [...tailed, ...companyPhrases(text, tailed, isProperNoun, isNoise)].sort((a, b) => a.start - b.start) : tailed;
+}
+
+// "| Contact | Karim |", "\"contact\": \"Shilan\"", "assigned:Aras", "Contact Mona
+// today": a proper noun right after a label that names a person is a
+// person, however unsure the model is (it scored these 0.3 to 0.5). Up to
+// three proper nouns; stops at the first everyday word.
+const FIELD = /(?<![\p{L}\p{N}])(?:full name|first name|last name|surname|name|contact|owner|student|employee|applicant|participant|trainee|attendee|candidate|assigned to|assigned|assignee|instructor|teacher|parent|guardian)(?![\p{L}\p{N}])["'”’]?[\s"'“”‘’:|,=]{1,6}/giu;
+const FIELD_WORD = /^\p{Lu}[\p{L}'’-]*/u;
+
+export function fieldNames(text, spans, { isProperNoun, isNoise, strong }) {
+  const found = [];
+  const confirmed = new Set();
+  for (const m of text.matchAll(FIELD)) {
+    const start = m.index + m[0].length;
+    const end = fieldNameEnd(text, start, { isProperNoun, isNoise });
+    if (end === start) continue;
+    const under = spans.filter((o) => start < o.end && o.start < end);
+    // A person the model already found there is confirmed as it is (it may
+    // be longer: "Sonia Ben Salah"); a confident place or company keeps its
+    // reading; otherwise the field name replaces whatever weak tag was there.
+    const people = under.filter((o) => o.kind === 'PER');
+    if (people.length) people.forEach((o) => confirmed.add(o));
+    else if (!under.some(strong)) found.push({ kind: 'PER', start, end, scores: [1] });
+  }
+  const kept = spans
+    .filter((o) => !found.some((f) => f.start < o.end && o.start < f.end))
+    .map((o) => (confirmed.has(o) ? { ...o, scores: [1] } : o));
+  return [...kept, ...found].sort((a, b) => a.start - b.start);
+}
+
+// Up to three proper nouns, with particles ("Ben", "El-") between them.
+function fieldNameEnd(text, start, { isProperNoun, isNoise }) {
+  let end = start;
+  for (let i = 0; i < 5; i += 1) {
+    const gap = i === 0 ? '' : /^[ \t]/.exec(text.slice(end))?.[0];
+    if (gap === undefined) break;
+    const word = FIELD_WORD.exec(text.slice(end + gap.length))?.[0];
+    if (!word) break;
+    const particle = NAME_PARTICLES.has(word.toLowerCase().replace(/-$/, ''));
+    if (!particle && (!isProperNoun(word) || isNoise(word) || CALENDAR.has(word.toLowerCase()))) break;
+    end += gap.length + word.length;
+  }
+  // A particle on its own at the end is not part of the name.
+  const tail = text.slice(start, end).split(/[ \t]+/).at(-1) ?? '';
+  return NAME_PARTICLES.has(tail.toLowerCase()) ? end - tail.length - 1 : end;
 }
 
 // A MISC group of two or more unknown capitalized words is a person. One

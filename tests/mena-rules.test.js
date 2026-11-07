@@ -134,3 +134,14 @@ test('a name first pasted with an invisible character is found again later (revi
   // Nothing leaks. (The repeat may get a new number: the vault keys values exactly as pasted.)
   assert.match(second.text, /^\[PERSON_\d\] and \[PERSON_\d\] and \[PERSON_\d\] again$/);
 });
+
+test('ID keywords are never names, so the vault never learns them (found live)', async () => {
+  const { isNeverEntity } = await import('../src/core/ner.js');
+  for (const w of ['CIN', 'cin', 'Iqama', 'civil id', 'Emirates ID']) assert.equal(isNeverEntity(w), true, w);
+});
+
+test('phone words glued to the number, and a bracketed country code (review findings)', () => {
+  for (const s of ['Tel0501234567', 'phone_0501234567', 'mob.0501234567']) assert.deepEqual(found(s), [['PHONE', '0501234567']], s);
+  assert.deepEqual(found('(+961) 03 123 456'), [['PHONE', '(+961) 03 123 456']]);
+  assert.deepEqual(found('the telescope 123456 units'), []);
+});
