@@ -159,6 +159,37 @@ export const SAMPLES = [
     sensitive: ['Fatou Diallo'],
     keep: ['visa form'],
   },
+  // Typed in lowercase: the model is cased, so these need truecasing.
+  {
+    text: 'my name is ali hassan and my phone number is 888999000',
+    sensitive: ['ali hassan', '888999000'],
+    keep: ['my name is', 'phone number'],
+  },
+  {
+    text: 'please write an email to sarah johnson about the contract renewal',
+    sensitive: ['sarah johnson'],
+    keep: ['write an email', 'contract renewal'],
+  },
+  {
+    text: 'can you help me reply to omar? he wants the report by thursday',
+    sensitive: ['omar'],
+    keep: ['reply to', 'the report'],
+  },
+  {
+    text: 'i met john yesterday and he said the meeting is moved',
+    sensitive: ['john'],
+    keep: ['yesterday', 'meeting is moved'],
+  },
+  {
+    text: 'ask fatima ahmed to send the signed invoice to the baghdad office',
+    sensitive: ['fatima ahmed', 'baghdad'],
+    keep: ['signed invoice'],
+  },
+  // Lowercase tech words and chat shorthand are rare words too, but no one.
+  { text: 'fix this python script, it reads a json file and fails after npm install', sensitive: [], keep: ['python script', 'json file', 'npm install'] },
+  { text: 'deploy the app to kubernetes and check the logs in grafana', sensitive: [], keep: ['kubernetes', 'grafana'] },
+  { text: 'run docker compose up, then open postgres', sensitive: [], keep: ['docker compose', 'postgres'] },
+  { text: 'thx, pls summarize this todo list lol', sensitive: [], keep: ['thx', 'pls', 'todo list', 'lol'] },
   // Name-free prompts that start the same way: nothing should be replaced.
   { text: 'Call the vendor tomorrow and confirm the delivery window.', sensitive: [], keep: ['Call the vendor', 'delivery window'] },
   { text: 'Email the finance team the updated budget spreadsheet.', sensitive: [], keep: ['Email the finance team', 'budget spreadsheet'] },

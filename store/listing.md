@@ -33,6 +33,8 @@ Everything happens on your device. A small language model ships inside the exten
 
 HOW IT WORKS
 • Paste or drag text into a supported AI chat. Sensitive details are swapped for placeholders before the site receives the text, and a small panel shows what was replaced.
+
+• Type a message and press Enter or Send: the message is checked first, and anything sensitive is replaced before the site sends it. Messages with nothing to hide are sent as normal.
 • The same person keeps the same placeholder, so the AI's answer still makes sense. A later mention of just "Maria" is usually matched to "Maria Gonzalez" too.
 • Every paste reports what it replaced, by type (for example: 5 names, 3 emails, 2 phone numbers). The popup keeps a running tally for the session, by type and by site.
 • In the AI's reply, names and contact details are shown as the real values on your screen. They are drawn outside the page's own text, so the website's scripts still see the placeholders.
@@ -67,7 +69,7 @@ If you already run Ollama or LM Studio on your computer, you can switch the dete
 GOOD TO KNOW
 • Automatic detection is a safety net, not a guarantee. Glance at the replacement panel before sending anything highly sensitive.
 • The built-in model is English-only.
-• Text you type by hand is not checked automatically. Press Alt+Shift+A after typing to clean the text box.
+• Typed text is checked when you press Enter or click a Send button. Sites that send another way (for example a button with no label) may not be covered; press Alt+Shift+A first to be sure.
 
 Not affiliated with or endorsed by OpenAI, Anthropic, Google, Microsoft, Perplexity, DeepSeek, Mistral AI, xAI or Quora.
 ```

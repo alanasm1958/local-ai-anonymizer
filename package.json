@@ -9,11 +9,14 @@
     "coverage": "node --test --experimental-test-coverage --test-coverage-include=\"src/core/**\" \"tests/**/*.test.js\"",
     "test:e2e": "node --test --test-concurrency=1 \"tests/e2e/*.e2e.js\"",
     "eval": "node scripts/eval-ner.mjs",
+    "scenarios": "node scripts/scenarios.mjs",
+    "test:scenarios": "node --test --test-concurrency=1 tests/e2e/scenarios.e2e.js",
     "vendor": "node scripts/vendor.mjs",
     "postinstall": "node scripts/vendor.mjs",
     "lint": "eslint .",
     "package": "node scripts/package.mjs",
-    "store-assets": "node scripts/store-assets.mjs"
+    "store-assets": "node scripts/store-assets.mjs",
+    "stress": "node scripts/stress.mjs"
   },
   "engines": {
     "node": ">=22"

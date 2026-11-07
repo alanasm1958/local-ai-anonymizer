@@ -15,7 +15,7 @@ You see:        Dear Ahmed Al-Rashid, thank you for reaching out on behalf of Gu
 
 | Layer | Detects | How |
 |-------|---------|-----|
-| **1. Rules** (exact, instant) | Emails, phone numbers, credit cards (checksum verified), IBANs (checksum verified), US SSNs, IP addresses, API keys and passwords, private keys, dates of birth (after "DOB", "born on"), ID / passport / account / case numbers (after those words), street addresses, UK postcodes and US state + ZIP, URLs (off by default) | Regular expressions with validators |
+| **1. Rules** (exact, instant) | Emails, phone numbers (numbering plans for 18 Middle East and North Africa countries, local or international, Arabic-Indic and Persian digits too), credit cards (checksum verified), IBANs (checksum verified, any case), US SSNs, IP addresses, API keys and passwords, private keys, dates of birth (after "DOB", "born on", تاريخ الميلاد), ID / passport / national ID / civil ID / iqama / CIN / account / case numbers (after those words, in English or Arabic), street addresses, UK postcodes and US state + ZIP, URLs (off by default) | Regular expressions with validators |
 | **2. Built-in model** (default) | People, companies and organizations, places | DistilBERT-NER (English, 66 MB), runs in the browser with Transformers.js |
 | **2b. Ollama** (optional) | All of the above plus addresses and ID numbers written in free text | Any model you run with Ollama, LM Studio or another OpenAI-compatible server on `localhost` |
 | **3. Restore** | Puts real values back into AI replies | Automatic on supported sites, or by hand in the popup |
@@ -35,6 +35,8 @@ Measured with `npm run eval` on 25 hand-written samples (support tickets, HR, me
 | Rules + BERT-base-NER (109 MB, not bundled) | 100% | 100% | about 8 ms per sample |
 
 The sample set was also used to tune the extension, so expect real-world numbers to be somewhat lower. Single first names on their own ("Carlos") are the most common miss.
+
+A second, larger test (`npm run stress`) generates 3,498 cases for users across the Middle East and North Africa: 14 countries' phone numbers, IDs and IBANs, regional names in every casing (Title, lower, UPPER, mIxEd), 17 places in the text (tables, CSV, JSON, signatures, long pastes) and copy-paste traps (zero-width spaces, right-to-left marks, Arabic-Indic digits). Its leak check is strict: one surname or any 4 digits left behind counts as a leak. Current result (2026-11-08): 3,293 pass, 17 fail, no ordinary sentence hidden by mistake. Phones, IDs, IBANs, cards, dates of birth, emails, keys, IPs and Western addresses: no leaks. Names: 1,250 of 1,262 caught (99.0%). Remaining misses: a lone first name in a table cell or JSON value, a lowercase company name with no company word ("carthage textiles"). Not covered yet: names written in Arabic script, regional addresses ("Building 5, Street 9, Maadi").
 
 ## Install
 
@@ -112,6 +114,7 @@ setx OLLAMA_ORIGINS "chrome-extension://*"
   - sites that accept a paste anywhere on the page and route it into their message box.
 
   Password, number and date fields are left alone. Moving text around inside the message box is not intercepted.
+- **Type and send:** when you press Enter (or Ctrl/Cmd+Enter) or click a Send button, a typed message is checked first. If it holds sensitive data, the send waits, the message box is anonymized, then the send goes ahead. A background check after each pause in typing lets clean messages go through instantly as the real keystroke. Shift+Enter (new line) is never held. If the check fails, nothing is sent and the panel offers **Send anyway**. Turn it off in Settings ("Check typed text before it is sent").
 - **Attach files:** files you pick, drag or paste into a protected AI site are cleaned before the site receives them:
   - text and code files, CSV and JSON;
   - Word (`.docx`), Excel (`.xlsx`) and PowerPoint (`.pptx`), with formatting kept and author names removed.
@@ -146,7 +149,7 @@ Real keyboard pastes (logged out, nothing sent) leave no sensitive value in the 
 
 Limits: automatic detection is a safety net, not a guarantee.
 - The built-in model is English-only and misses some names, especially single first names.
-- Typing sensitive data by hand is not checked; only paste, drag-and-drop, file uploads and the `Alt+Shift+A` shortcut are. Use the shortcut after typing.
+- Typed text is checked on Enter, Ctrl/Cmd+Enter, a Send/Submit button or a form submit. A site that sends some other way (an unlabelled icon button outside a form, a send on mouse-down) is not covered; press `Alt+Shift+A` first there.
 - Text inside PDFs and images is not read. Those files are held so you can decide, not cleaned.
 - Uploads made through the browser's newer file-picker API (rather than a regular file button) are not intercepted.
 - Inside Office files, the following are cleaned: text, tables, headers and footers, comments, tracked deletions, field codes, link targets, slide notes, pivot-table caches and author metadata. The preview thumbnail is replaced with a blank image. Not checked (the panel lists whatever applies): images, charts, embedded files, custom XML data, Excel table column names, sheet names and formulas, and numbers stored as numbers.

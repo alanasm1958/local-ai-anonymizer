@@ -7,6 +7,7 @@ import { anonymize } from '../src/core/anonymizer.js';
 import { createVault } from '../src/core/vault.js';
 import { DEFAULT_SETTINGS, BUILTIN_MODEL_TYPES } from '../src/core/settings.js';
 import { detectWithModel, BUILTIN_MODEL } from '../src/core/ner.js';
+import { vocabularyLookup } from '../src/core/truecase.js';
 import { SAMPLES } from '../tests/eval/samples.js';
 
 const DEFAULT_MODELS = [BUILTIN_MODEL.id, 'Xenova/bert-base-NER'];
@@ -60,6 +61,7 @@ for (const id of models) {
   console.error(`${id} loaded in ${Date.now() - loadStart} ms`);
   const runModel = (chunk) => ner(chunk, { ignore_labels: [] });
   const countTokens = (chunk) => ner.tokenizer(chunk).input_ids.dims.at(-1);
-  results.push(await score(id, (text) => detectWithModel(text, runModel, BUILTIN_MODEL_TYPES, { countTokens })));
+  const isKnownWord = vocabularyLookup(ner.tokenizer.get_vocab());
+  results.push(await score(id, (text) => detectWithModel(text, runModel, BUILTIN_MODEL_TYPES, { countTokens, isKnownWord })));
 }
 results.forEach(print);

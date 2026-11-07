@@ -2,6 +2,8 @@
 // (global, with the `d` flag so capture groups report offsets), an optional
 // capture group to use as the span, and an optional validator.
 
+import { fitsRegionalPlan } from './phone-plans.js';
+
 const digitsOnly = (s) => s.replace(/\D/g, '');
 
 export function luhnValid(input) {
@@ -36,12 +38,37 @@ export function isIPv6(input) {
 
 const DATE_LIKE = /^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}$|^\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}$/;
 
+const IPV4_LIKE = /^\d{1,3}(?:\.\d{1,3}){3}$/;
+// "2019-2024", "1999 2000 2001", "5000 6000", "1200 1500": years and round
+// amounts in a row read like a Gulf number written 4-4, but are not one.
+const YEAR = /^(?:19|20)\d\d$/;
+function yearsOrRound(candidate) {
+  const groups = candidate.trim().split(/[\s.-]+/);
+  return groups.length >= 2 && groups.every((g) => g.length === 4)
+    && (groups.every((g) => YEAR.test(g)) || groups.every((g) => g.endsWith('00')));
+}
+
+// "555-1234", "123 4567": a local number with no area code.
+const SEVEN_DIGIT_LOCAL = /^\d{3}[ -]\d{4}$/;
+
 function phoneValid(candidate) {
   const digits = digitsOnly(candidate);
-  if (digits.length < 9 || digits.length > 15) return false;
-  if (DATE_LIKE.test(candidate.trim())) return false;
+  if (digits.length < 7 || digits.length > 15) return false;
+  if (DATE_LIKE.test(candidate.trim()) || IPV4_LIKE.test(candidate.trim()) || yearsOrRound(candidate)) return false;
+  // Exact check first: a number that fits a regional numbering plan.
+  if (fitsRegionalPlan(candidate)) return true;
+  if (SEVEN_DIGIT_LOCAL.test(candidate.trim())) return true;
+  if (digits.length < 9) return false;
   const hasFormatting = /^\+|[\s().-]/.test(candidate);
   return hasFormatting || digits.length >= 10;
+}
+
+// After a phone word the number is a phone whatever its shape, so shorter
+// local numbers ("phone 888999000") count too.
+// Six digits is a full local number in Lebanon and in many towns.
+function keywordPhoneValid(candidate) {
+  const digits = digitsOnly(candidate);
+  return digits.length >= 6 && digits.length <= 15 && !DATE_LIKE.test(candidate);
 }
 
 const MONTH = '(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\\.?';
@@ -49,6 +76,7 @@ const DATE = [
   '\\d{4}-\\d{1,2}-\\d{1,2}',
   '\\d{1,2}[/.-]\\d{1,2}[/.-]\\d{2,4}',
   `\\d{1,2}(?:st|nd|rd|th)?\\s+${MONTH},?\\s+\\d{4}`,
+  `\\d{1,2}[-/.]${MONTH}[-/.]\\d{2,4}`,
   `${MONTH}\\s+\\d{1,2}(?:st|nd|rd|th)?,?\\s+\\d{4}`,
 ].join('|');
 
@@ -74,11 +102,27 @@ const UK_AREAS = [
 // "5GB", "1TB": storage sizes that happen to fit the inward-code shape.
 const notStorageSize = (value) => !/\d(?:GB|TB|PB)$/.test(value);
 
-// Keyword-gated IDs must look like IDs: no lowercase, at least one digit.
-// The regex is case-insensitive for the keyword only.
-const looksLikeId = (value) => /^[A-Z0-9-]+$/.test(value) && /\d/.test(value);
+// Keyword-gated IDs must look like IDs: capitals and digits with at least
+// one digit, or, typed in lowercase, at most 3 letters in front of 4+ digits
+// ("passport no a39573324", "case cr-656436"). Words with a number in them
+// ("python3", "handbook2024", "node18-alpine") never qualify.
+const looksLikeId = (value) => (/^[A-Z0-9-]+$/.test(value)
+  ? /\d/.test(value)
+  : /^[A-Za-z]{0,3}-?\d{4,}[A-Za-z]?$/.test(value));
 
-const STREET_WORDS = '(?:[A-Z][a-z]+\\.?[ \\t]{1,3}){1,4}';
+// Any casing ("221 baker street", "221 BAKER STREET"). Prose that reads like
+// an address ("3 kids on the road", "2 hours down the street") has an
+// everyday word between the number and the street word, which rules it out.
+const STREET_WORDS_ANY_CASE = "(?:[A-Za-z][A-Za-z'-]+\\.?[ \\t]{1,3}){1,4}";
+const NOT_STREET_NAMES = new Set([
+  'the', 'a', 'an', 'on', 'of', 'to', 'in', 'at', 'for', 'and', 'or', 'with', 'my', 'our', 'your', 'his', 'her',
+  'their', 'its', 'this', 'that', 'these', 'those', 'down', 'up', 'along', 'across', 'by', 'from', 'near', 'into',
+  'onto', 'off', 'over', 'is', 'are', 'was', 'were', 'be', 'more', 'other', 'times', 'kids', 'children', 'people',
+  'cars', 'hours', 'minutes', 'miles', 'km', 'days', 'weeks', 'years', 'blocks', 'lanes', 'ways', 'steps',
+]);
+const STREET_TYPE = /\s*\S+(?:\s+(?:NW|NE|SW|SE|N|S|E|W))?$/i;
+const streetNameOk = (value) => value.replace(/^\d{1,5}[A-Za-z]?\s+/, '').replace(STREET_TYPE, '')
+  .split(/\s+/).every((w) => !NOT_STREET_NAMES.has(w.toLowerCase().replace(/\.$/, '')));
 const COMPASS = '(?:[ \\t](?:NW|NE|SW|SE|N|S|E|W)\\b)?';
 
 const DETECTORS = Object.freeze([
@@ -114,7 +158,8 @@ const DETECTORS = Object.freeze([
   },
   {
     type: 'IBAN',
-    regex: /\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,4})?\b/gd,
+    // Any case: an IBAN typed in lowercase is still that account.
+    regex: /\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,4})?\b/gid,
     validate: ibanValid,
     shrink: true,
   },
@@ -131,26 +176,36 @@ const DETECTORS = Object.freeze([
   {
     // Only right after a birth keyword, so ordinary dates are left alone.
     type: 'DATE_OF_BIRTH',
-    regex: new RegExp(`\\b(?:DOB|D\\.O\\.B\\.?|date of birth|birth ?date|born(?: on)?|birthday)(?![a-z])[ \\t:.-]{0,5}(${DATE})`, 'gid'),
+    regex: new RegExp(`(?:\\b(?:DOB|D\\.O\\.B\\.?|date of birth|birth ?date|born(?: on)?|birthday)|تاريخ الميلاد|تاريخ ميلاد|مواليد)(?![a-z])[ \\t:.-]{0,5}["'\u201c\u2018(]?(${DATE})`, 'gid'),
     group: 1,
   },
   {
     // Keyword-gated so "the account manager" is not touched. Gaps are bounded:
     // two adjacent unbounded \s runs backtrack quadratically on long spaces.
     type: 'ID_NUMBER',
-    regex: /\b(?:passport|account|acct|customer|client|member|employee|staff|student|patient|policy|case|claim|invoice|ticket|reference|ref|licen[cs]e|MRN|NHS|national id|ID)(?:[ \t]{1,3}(?:no\.?|number|num|#|id))?[ \t]{0,3}[:#.]?[ \t]{0,3}([A-Z0-9][A-Z0-9-]{3,24}[A-Z0-9])\b/gid,
+    regex: /\b(?:passport|account|acct|customer|client|member|employee|staff|student|patient|policy|case|claim|invoice|ticket|reference|ref|licen[cs]e|MRN|NHS|national id|national number|civil id|iqama|CIN|CNIE|ID)(?:[ \t]{1,3}(?:no\.?|number|num|#|id|card))?[ \t]{0,3}[:#.]?[ \t]{0,3}([A-Z0-9][A-Z0-9-]{3,24}[A-Z0-9])\b/gid,
+    group: 1,
+    validate: looksLikeId,
+  },
+  {
+    // Arabic ID words: الرقم القومي (Egypt), رقم الهوية, الرقم الوطني, الرقم
+    // المدني (Kuwait), رقم الإقامة, جواز السفر. No \b: it only knows ASCII.
+    type: 'ID_NUMBER',
+    regex: /(?:الرقم القومي|رقم الهوية|الهوية الوطنية|الرقم الوطني|الرقم المدني|رقم الإقامة|رقم الاقامة|رقم جواز السفر|جواز السفر|رقم البطاقة)[ \t:#.]{0,4}([A-Za-z0-9][A-Za-z0-9-]{3,24}[A-Za-z0-9])\b/gd,
     group: 1,
     validate: looksLikeId,
   },
   {
     type: 'ADDRESS',
-    regex: new RegExp(`\\b\\d{1,5}[A-Z]?[ \\t]{1,3}${STREET_WORDS}(?:Street|St|Avenue|Ave|Road|Rd|Lane|Ln|Boulevard|Blvd|Terrace|Crescent|Parkway|Pkwy|Highway|Hwy)\\b${COMPASS}`, 'gd'),
+    regex: new RegExp(`\\b\\d{1,5}[A-Z]?[ \\t]{1,3}${STREET_WORDS_ANY_CASE}(?:Street|St|Avenue|Ave|Road|Rd|Lane|Ln|Boulevard|Blvd|Terrace|Crescent|Parkway|Pkwy|Highway|Hwy)\\b${COMPASS}`, 'gid'),
+    validate: streetNameOk,
   },
   {
     // "Drive", "Way", "Court"... are also product and software words
     // ("2 Google Drive accounts"), so these need a town after a comma.
     type: 'ADDRESS',
-    regex: new RegExp(`\\b\\d{1,5}[A-Z]?[ \\t]{1,3}${STREET_WORDS}(?:Drive|Dr|Way|Court|Ct|Place|Pl|Close|Square|Sq)\\b${COMPASS}(?=,[ \\t]{0,3}[A-Z][a-z])`, 'gd'),
+    regex: new RegExp(`\\b\\d{1,5}[A-Z]?[ \\t]{1,3}${STREET_WORDS_ANY_CASE}(?:Drive|Dr|Way|Court|Ct|Place|Pl|Close|Square|Sq)\\b${COMPASS}(?=,[ \\t]{0,3}[A-Za-z]{2})`, 'gid'),
+    validate: streetNameOk,
   },
   {
     type: 'POSTCODE',
@@ -172,8 +227,28 @@ const DETECTORS = Object.freeze([
   },
   {
     type: 'PHONE',
-    regex: /(?<![\w+])(?:\+\d{1,3}[\s.-]?)?(?:\(\d{1,4}\)[\s.-]?)?\d{2,5}(?:[\s.-]?\d{2,5}){1,4}(?![\w])/gd,
+    // Groups of 1 to 5 digits: "+961 3 54 6390", "00212 6 12 34 56 78".
+    regex: /(?<![\w+.])(?:\+\d{1,3}[\s.-]?)?(?:\(\d{1,4}\)[\s.-]?)?\d{1,5}(?:[ \t.-]?\d{1,5}){1,5}(?![\w]|[.:]\d)/gd,
     validate: phoneValid,
+    shrink: true,
+    // "07701234567-07801234567": two numbers run together.
+    split: true,
+  },
+  {
+    // Keyword-gated like ID_NUMBER: "my phone number is 888999000",
+    // "WhatsApp me on 964 7701 234". Gaps are bounded to stay linear.
+    type: 'PHONE',
+    regex: /\b(?:phone|mobile|cell(?:phone)?|tel(?:ephone)?|whats ?app|viber|fax|call me)\b\.?(?:[ \t]{1,3}(?:no\.?|number|num|#))?(?:[ \t]{1,3}(?:is|was))?(?:[ \t]{1,3}(?:me[ \t]{1,3})?(?:on|at))?[ \t]{0,3}[:#]?[ \t]{0,3}(\+?\d(?:[ .-]?\d){4,14})(?!\w)/gid,
+    group: 1,
+    validate: keywordPhoneValid,
+  },
+  {
+    // Arabic phone words: هاتف، جوال، موبايل، رقم، واتساب (no \b: JS word
+    // boundaries only know ASCII letters).
+    type: 'PHONE',
+    regex: /(?:هاتف|جوال|الجوال|موبايل|الموبايل|رقم|واتساب|تلفون)[^\d\n+]{0,12}(\+?\d(?:[ .-]?\d){4,14})(?!\w)/gd,
+    group: 1,
+    validate: keywordPhoneValid,
   },
 ]);
 
@@ -199,14 +274,33 @@ function firstValid(detector, value) {
   return null;
 }
 
+// Two valid values joined by one separator ("0770.../0780...", "...-..."),
+// as [offset, value] pairs; null when no split gives two valid halves.
+function splitPair(detector, value) {
+  if (!detector.split || detector.validate(value)) return null;
+  for (const m of value.matchAll(/[ \t.-]/g)) {
+    const left = value.slice(0, m.index);
+    const right = value.slice(m.index + 1);
+    if (detector.validate(left) && detector.validate(right)) return [[0, left], [m.index + 1, right]];
+  }
+  return null;
+}
+
 function* matchDetector(text, detector) {
   if (detector.requires && !detector.requires.test(text)) return;
   for (const match of text.matchAll(detector.regex)) {
     const group = detector.group ?? 0;
     if (match[group] === undefined) continue;
+    const [start] = match.indices[group];
+    const pair = splitPair(detector, match[group]);
+    if (pair) {
+      for (const [offset, value] of pair) {
+        yield { start: start + offset, end: start + offset + value.length, type: detector.type, value, source: 'pattern' };
+      }
+      continue;
+    }
     const value = firstValid(detector, match[group]);
     if (value === null) continue;
-    const [start] = match.indices[group];
     yield { start, end: start + value.length, type: detector.type, value, source: 'pattern' };
   }
 }

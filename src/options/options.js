@@ -236,6 +236,7 @@ async function init() {
   renderTypeChecks($('#pattern-types'), PATTERN_TYPES, 'patternTypes');
   renderModelTypes();
   $('#interceptPaste').checked = settings.interceptPaste;
+  $('#checkTyping').checked = settings.checkTyping;
   $('#restoreReplies').checked = settings.restoreReplies;
   $('#checkFiles').checked = settings.checkFiles;
   $('#holdUncheckedFiles').checked = settings.holdUncheckedFiles;
@@ -246,6 +247,7 @@ async function init() {
   $('#endpoint').addEventListener('input', updateEndpointWarning);
   $('#useModel').addEventListener('change', (e) => save({ useModel: e.target.checked }));
   $('#interceptPaste').addEventListener('change', (e) => save({ interceptPaste: e.target.checked }));
+  $('#checkTyping').addEventListener('change', (e) => save({ checkTyping: e.target.checked }));
   $('#restoreReplies').addEventListener('change', (e) => save({ restoreReplies: e.target.checked }));
   $('#checkFiles').addEventListener('change', (e) => save({ checkFiles: e.target.checked }));
   $('#holdUncheckedFiles').addEventListener('change', (e) => save({ holdUncheckedFiles: e.target.checked }));

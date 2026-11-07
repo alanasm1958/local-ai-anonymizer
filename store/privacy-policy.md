@@ -10,7 +10,7 @@ The extension does not collect, store on any server, sell or share your data. It
 
 ## What the extension handles, and where it stays
 
-**Text you choose to anonymize.** This is text you paste or drag into a protected AI chat site, text you select and anonymize with the right-click menu or the keyboard shortcut, and text you type into the extension's popup. It is analyzed on your device by pattern rules and by a small language model that ships inside the extension. It is not sent to the developer or to any third party.
+**Text you choose to anonymize.** This is text you paste or drag into a protected AI chat site, text you type there (checked when you press Enter or click Send, and briefly after you pause typing), text you select and anonymize with the right-click menu or the keyboard shortcut, and text you type into the extension's popup. It is analyzed on your device by pattern rules and by a small language model that ships inside the extension. It is not sent to the developer or to any third party.
 
 **Files.** Files you attach to a protected AI chat site, or open on the extension's file page, are read and cleaned on your device in the same way, and the cleaned copy is handed to the site or offered to you as a download. Author names are removed from Office documents. The extension does not keep copies of your files.
 

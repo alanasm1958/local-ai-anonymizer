@@ -4,6 +4,16 @@
 
 import { createServer } from 'node:http';
 
+// A proxy can't tell who asked, so allow only what is known not to be the
+// extension: Chrome's own background services, and the connection Chrome
+// opens to the fake AI sites before context.route serves them. Any other
+// host (a model hub, a CDN, an analytics endpoint) is unexpected.
+// Chromium's own services also use gvt1/gvt2 (component updater) and
+// googleusercontent on fresh CI machines.
+const BROWSER_OR_TEST = /(^|\.)(google\.com|googleapis\.com|gstatic\.com|gvt1\.com|gvt2\.com|googleusercontent\.com|chatgpt\.com|claude\.ai)(:\d+)?$/;
+
+export const unexpectedHosts = (hosts) => [...new Set(hosts)].filter((host) => !BROWSER_OR_TEST.test(host));
+
 export function startRecordingProxy() {
   const hosts = [];
   const server = createServer((req, res) => {

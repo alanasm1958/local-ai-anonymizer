@@ -214,3 +214,11 @@ test('organizations with a company suffix are caught even when the model misses 
   const kept = await anonymize('Northwind Traders paid on time.', { settings: off, vault: createVault(), detectEntities: async () => [] });
   assert.equal(kept.text, 'Northwind Traders paid on time.');
 });
+
+test('one name in different casing gets one placeholder even when the model types it differently', async () => {
+  const detectEntities = async () => [
+    { text: 'Omar Farouk', type: 'PERSON' }, { text: 'OMAR FAROUK', type: 'ORGANIZATION' },
+  ];
+  const { text } = await anonymize('Ask Omar Farouk. OMAR FAROUK will call.', { settings: DEFAULT_SETTINGS, vault: createVault(), detectEntities });
+  assert.equal(text, 'Ask [PERSON_1]. [PERSON_1] will call.');
+});

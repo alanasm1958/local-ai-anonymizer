@@ -4,3 +4,5 @@ coverage/
 *.zip
 vendor/
 dist/
+test-results/*
+!test-results/REPORT.md

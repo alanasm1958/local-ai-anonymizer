@@ -127,3 +127,8 @@ test('client enforces an overall deadline across chunks', async () => {
   });
   await assert.rejects(client.detectEntities('aaaa bbbb.\n\ncccc dddd.\n\neeee ffff.\n\ngggg', ['PERSON']), /took longer than/);
 });
+
+test('entitiesToSpans matches a name wrapped in markdown underscores', () => {
+  const spans = entitiesToSpans('- _Robert Kim_ and user_Robert', [{ text: 'Robert Kim', type: 'PERSON' }]);
+  assert.deepEqual(spans.map((s) => s.start), [3]);
+});

@@ -1,6 +1,7 @@
 // Content script (classic script: MV3 content scripts cannot be modules).
 // Intercepts paste on AI sites, sends the text to the service worker for
-// local anonymization, then inserts the anonymized version.
+// local anonymization, then inserts the anonymized version. Typed text is
+// checked on send by send-guard.js.
 
 (() => {
   if (window.__localAnonymizerLoaded) return;
@@ -11,7 +12,7 @@
 
   // Fail closed: protection is on from the first moment, before the worker
   // has confirmed this site's settings.
-  const PROTECTED = Object.freeze({ active: true, interceptPaste: true, checkFiles: true, holdUncheckedFiles: true });
+  const PROTECTED = Object.freeze({ active: true, interceptPaste: true, checkTyping: true, checkFiles: true, holdUncheckedFiles: true });
   const state = { ...PROTECTED, restoreReplies: false };
   let dispatchingSynthetic = false;
 
@@ -40,11 +41,28 @@
     return response.data;
   }
 
+  // about:blank and srcdoc frames (iframe editors) have no hostname of their
+  // own; they belong to the page that made them, so use the inherited or
+  // ancestor origin. Opaque origins ("null") are skipped.
+  function siteHostname() {
+    if (location.hostname) return location.hostname;
+    for (const origin of [location.origin, ...(location.ancestorOrigins ?? [])]) {
+      try {
+        const host = new URL(origin).hostname;
+        if (host) return host;
+      } catch {
+        // opaque origin: try the next ancestor
+      }
+    }
+    return location.hostname;
+  }
+
   async function refreshStatus() {
     try {
-      const status = await send('siteStatus', { hostname: location.hostname });
+      const status = await send('siteStatus', { hostname: siteHostname() });
       state.active = status.active;
       state.interceptPaste = status.interceptPaste;
+      state.checkTyping = status.checkTyping;
       state.restoreReplies = status.restoreReplies;
       state.checkFiles = status.checkFiles;
       state.holdUncheckedFiles = status.holdUncheckedFiles;
@@ -388,6 +406,9 @@
   // ---------- wiring ----------
 
   uploads?.watchFileInputs();
+  globalThis.__anonymizerSendGuard?.createSendGuard({
+    send, ui, settings: () => state, editableRoot, isTextControl, selectAll, selectedText, insertText, describeResult,
+  }).watch();
   window.addEventListener('paste', onPaste, true);
   window.addEventListener('drop', onDrop, true);
   window.addEventListener('dragstart', onDragStart, true);

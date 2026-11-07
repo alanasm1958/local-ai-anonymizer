@@ -43,6 +43,16 @@ test('detects phone numbers but not dates or short numbers', () => {
   assert.deepEqual(values('Order 12345 shipped'), []);
 });
 
+test('short unformatted numbers count as phones only after a phone word', () => {
+  assert.deepEqual(values('my phone number is 888999000'), [['PHONE', '888999000']]);
+  assert.deepEqual(values('Mobile: 7701234'), [['PHONE', '7701234']]);
+  assert.deepEqual(values('WhatsApp me on 964 7701 234'), [['PHONE', '964 7701 234']]);
+  assert.deepEqual(values('tel. 555123456'), [['PHONE', '555123456']]);
+  assert.deepEqual(values('The budget is 888999000'), []);
+  assert.deepEqual(values('phone 1234'), []);
+  assert.deepEqual(values('telephone number is 2026-10-24'), []);
+});
+
 test('detects only Luhn-valid credit cards', () => {
   assert.deepEqual(values('Card 4111 1111 1111 1111 exp 12/27'), [['CREDIT_CARD', '4111 1111 1111 1111']]);
   assert.deepEqual(values('Card 4111 1111 1111 1112', { CREDIT_CARD: true }), []);

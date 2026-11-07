@@ -78,9 +78,9 @@ const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // Whole-word match that still works when the entity starts or ends with punctuation.
 function occurrenceRegex(needle) {
-  const head = /^\w/.test(needle) ? '(?<!\\w)' : '';
-  const tail = /\w$/.test(needle) ? '(?!\\w)' : '';
-  return new RegExp(`${head}${escapeRegex(needle)}${tail}`, 'g');
+  const head = /^[\p{L}\p{N}]/u.test(needle) ? '(?<![\\p{L}\\p{N}])' : '';
+  const tail = /[\p{L}\p{N}]$/u.test(needle) ? '(?![\\p{L}\\p{N}])' : '';
+  return new RegExp(`${head}${escapeRegex(needle)}${tail}`, 'gu');
 }
 
 export function entitiesToSpans(text, entities) {

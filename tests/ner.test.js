@@ -220,3 +220,64 @@ test('a command or greeting word on its own is never a name', () => {
   ];
   assert.deepEqual(pairs(alignTokens(text, tokens)), [['Hannah Becker', 'PERSON'], ['Tom Ruiz', 'PERSON']]);
 });
+
+test('detectWithModel shows the model truecased text but reports the original words', async () => {
+  const seen = [];
+  const runModel = async (chunk) => {
+    seen.push(chunk);
+    return chunk.split(/\s+/).map((w) => ({
+      word: w, entity: w === 'Omar' ? 'B-PER' : w === 'Haddad' ? 'I-PER' : 'O', score: 0.99,
+    }));
+  };
+  const isKnownWord = (w) => ['ask', 'to', 'call', 'me'].includes(w);
+  const entities = await detectWithModel('ask omar haddad to call me', runModel, ['PERSON'], { isKnownWord });
+  assert.deepEqual(seen, ['ask Omar Haddad to call me']);
+  assert.deepEqual(entities, [{ text: 'omar haddad', type: 'PERSON' }]);
+});
+
+test('a name the model runs into an email address stops before the @', () => {
+  const text = 'Aisha Bello aisha@unilag.example';
+  const tokens = [tok('Aisha', 'B-PER'), tok('Bello', 'I-PER'), tok('aisha', 'I-PER'), tok('@', 'O')];
+  assert.deepEqual(pairs(alignTokens(text, tokens)), [['Aisha Bello', 'PERSON']]);
+});
+
+test('job titles, Passport and command verbs are not entities', () => {
+  assert.deepEqual(pairs(alignTokens('Senior Analyst', [tok('Senior', 'B-PER'), tok('Analyst', 'O')])), []);
+  assert.deepEqual(pairs(alignTokens('Passport no.', [tok('Pass', 'B-LOC'), tok('##port', 'B-LOC'), tok('no', 'O')])), []);
+  assert.deepEqual(pairs(alignTokens('Compare ChatGPT', [tok('Compare', 'B-ORG'), tok('ChatGPT', 'I-ORG')])), []);
+});
+
+test('detectWithModel reads CSV rows one at a time', async () => {
+  const seen = [];
+  const runModel = async (chunk) => {
+    seen.push(chunk);
+    return [];
+  };
+  await detectWithModel('name,email\nWei Zhang,wei@x.example\n\nfatima ahmed,f@x.example', runModel, ['PERSON']);
+  assert.deepEqual(seen, ['name,email', 'Wei Zhang,wei@x.example', 'fatima ahmed,f@x.example']);
+});
+
+test('the stoplist ignores case, so truecased acronyms are still not entities', () => {
+  assert.deepEqual(pairs(alignTokens('Kyc report', [tok('Kyc', 'B-ORG'), tok('report', 'O')])), []);
+});
+
+test('CSV rows are read one at a time even with a plain line before or after them', async () => {
+  const seen = [];
+  const runModel = async (chunk) => {
+    seen.push(chunk);
+    return [];
+  };
+  await detectWithModel('Count the rows in this CSV:\nname,email\nWei Zhang,wei@x.example\nfatima ahmed,f@x.example\nThanks!', runModel, ['PERSON']);
+  assert.deepEqual(seen, ['Count the rows in this CSV:', 'name,email', 'Wei Zhang,wei@x.example', 'fatima ahmed,f@x.example', 'Thanks!']);
+});
+
+test('prose lines that happen to contain commas are still read together', async () => {
+  const seen = [];
+  const runModel = async (chunk) => {
+    seen.push(chunk);
+    return [];
+  };
+  const text = 'Hi team, quick update.\nThe report is late, sorry.';
+  await detectWithModel(text, runModel, ['PERSON']);
+  assert.deepEqual(seen, [text]);
+});

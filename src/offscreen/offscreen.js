@@ -4,6 +4,7 @@
 
 import { pipeline, env } from '../../vendor/transformers/transformers.min.js';
 import { detectWithModel, BUILTIN_MODEL } from '../core/ner.js';
+import { vocabularyLookup } from '../core/truecase.js';
 
 const LOAD_WAIT_MS = 20000;
 const IDLE_CLOSE_MS = 10 * 60 * 1000;
@@ -16,6 +17,7 @@ env.backends.onnx.wasm.numThreads = 1;
 const state = { status: 'idle', progress: 0, source: null, error: null };
 let loading = null;
 let idleTimer = null;
+let isKnownWord = null; // the model's vocabulary, for truecasing lowercase names
 
 // The model ships in vendor/ (npm run vendor). Remote loading stays off even
 // when it is missing: failing closed keeps the "nothing leaves this device"
@@ -67,8 +69,10 @@ async function detect({ text, types }) {
     loadModel(),
     timeout(LOAD_WAIT_MS, `Built-in model is still loading (${state.progress}%). Names were not checked this time.`),
   ]);
+  isKnownWord ??= vocabularyLookup(classifier.tokenizer.get_vocab());
   return detectWithModel(text, (chunk) => classifier(chunk, { ignore_labels: [] }), types, {
     countTokens: (chunk) => classifier.tokenizer(chunk).input_ids.dims.at(-1),
+    isKnownWord,
   });
 }
 

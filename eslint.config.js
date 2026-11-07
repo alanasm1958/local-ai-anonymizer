@@ -28,7 +28,7 @@ export default [
   },
   {
     // page.evaluate / worker.evaluate callbacks run inside the extension.
-    files: ['tests/e2e/**/*.js'],
+    files: ['tests/e2e/**/*.js', 'tests/helpers/extension-browser.js'],
     languageOptions: { globals: { ...globals.node, ...extensionGlobals } },
   },
 ];

@@ -61,6 +61,7 @@
         "src/content/toast.js",
         "src/content/reveal.js",
         "src/content/uploads.js",
+        "src/content/send-guard.js",
         "src/content/content.js"
       ],
       "run_at": "document_start",
