@@ -25,6 +25,7 @@ The user chose the smaller English-only model over a multilingual one (2026-10-2
 | `src/core/normalize.js` | `detectionView`: the copy detection reads (plain digits, no invisible characters) and `toOriginal` to map spans back. |
 | `src/core/phone-plans.js` | Numbering plans for 18 MENA countries; `fitsRegionalPlan` is the exact phone check. |
 | `src/core/name-parts.js` | Completes half-found names after the model (MISC as person, neighbours, particles, company tails). Called from `alignTokens` when `isKnownWord` is passed. |
+| `src/core/columns.js` | `columnSpans`: cells under a table header that names IDs or phones (cin, passport, civil ID, phone, رقم الهاتف...) are IDs/phones in CSV, TSV and markdown. Called from `detectPatterns`. Found live: a second-row CIN leaked. |
 | `src/core/names.js` | Lone first/last names of known full names get the full name's placeholder (`span.aliasOf`). `COMMON_WORD_NAMES` guards words like Will/May. |
 | `src/core/ner.js` | Model id/constants, `alignTokens` (word pieces with no offsets back to text spans), `detectWithModel` (chunking; CSV/TSV rows read one at a time). Stoplist `NEVER_ENTITIES`. |
 | `src/core/truecase.js` | The model is cased, so lowercase and ALL CAPS names were missed. The model reads a copy where shouted lines are lowered and lowercase words missing from its own vocabulary (`tokenizer.get_vocab()`) get a capital; same length, so entities are cut from the original text. `SHORTHAND` keeps chat/tech words (thx, json) as typed. |
@@ -55,6 +56,7 @@ The user chose the smaller English-only model over a multilingual one (2026-10-2
 - Every text paste on a protected site is intercepted, not just pastes into text boxes: sites like chat.mistral.ai route page-wide pastes into the composer. Non-editable targets get the anonymized text re-dispatched as a synthetic event.
 - Gemini uses Quill 1.x, which mishandles synthetic paste; `.ql-editor` targets are filled with execCommand line by line.
 - Typed text: never hold Shift+Enter or IME composition; only trusted events are held (page-dispatched events carry nothing the page lacks). Send buttons without a Send/Submit label outside a form are not detected; live-check each site after changes.
+- Claude's browser tools cannot press Chrome extension shortcuts (Alt/Option+Shift+A arrives as a letter) or open chrome://extensions; ask the user for that keypress and for reloads.
 - Live-site checks use real keyboard pastes (clipboard + Ctrl/Cmd+V); synthetic paste tests missed the Mistral leak.
 - Drop interception skips only trusted drags that started inside a text box on the page and carry exactly the dragged text (`pageDrag`); never trust untrusted dragstart/dragend.
 - Paste/drop text comes from `transferText`: text/plain, else text/html via inert DOMParser, else text/uri-list. Non-text form fields (password, number, date) return before reading the clipboard.

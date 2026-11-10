@@ -39,6 +39,8 @@ const LEADING_NOISE = new Set([
   'dear', 'hi', 'hello', 'hey', 'email', 'e-mail', 'call', 'contact', 'ask', 'tell', 'ping',
   'message', 'text', 'meet', 'thanks', 'thank', 'cc', 'attn', 'from', 'to', 'with',
   'mr', 'mrs', 'ms', 'miss', 'mx', 'dr', 'prof', 'sir', 'madam',
+  // Regional titles: "Eng. Samir Haddad" (found live), "Sheikh", "Kak" (Kurdish Mr.).
+  'eng', 'engr', 'eng.', 'sheikh', 'shaikh', 'sh', 'hajj', 'haj', 'hajji', 'ustaz', 'ustadh', 'kak', 'mam', 'h.e', 'he.',
   // Command verbs that open prompts (same list as orgs.js LEADING_WORDS).
   'explain', 'use', 'compare', 'write', 'summarize', 'summarise', 'review', 'draft', 'create', 'build',
   'analyze', 'analyse', 'describe', 'translate', 'check', 'find', 'show', 'list', 'give', 'make',
@@ -230,7 +232,9 @@ export function alignTokens(text, tokens, { offset = 0, minScore = NER_MIN_SCORE
     })
     .filter((e) => e.score >= threshold(e.kind, e.text, minScore, properNounCheck(isKnownWord)))
     .map((e) => ({ text: e.text, type: LABEL_TO_TYPE[e.kind], start: e.start + offset, end: e.end + offset, score: e.score }))
-    .filter((e) => e.text.length >= 2 && !isNeverEntity(e.text) && !isNoiseWord(e.text));
+    .filter((e) => e.text.length >= 2 && !isNeverEntity(e.text) && !isNoiseWord(e.text))
+    // Two groups can trim to the same name ("Eng." + "Samir Haddad").
+    .filter((e, i, all) => all.findIndex((o) => o.start === e.start && o.end === e.end) === i);
 }
 
 // Capitalized and unknown to the vocabulary in lowercase: a name or place.

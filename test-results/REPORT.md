@@ -210,3 +210,41 @@ The existing browser suite (90 tests) re-checks delivery for the current rules.
 1. Arabic-script names: 0 of 36 caught. This needs a multilingual model or an Arabic name list, and it's a product decision.
 2. Whether a lone first name in a table cell must be caught. Today: 11 misses.
 3. Committing this work. Nothing is committed, and it sits on top of the earlier uncommitted work from `ci/windows-macos`.
+
+## Live re-check of the second round of fixes (2026-11-10)
+
+The extension was reloaded in Alan's Chrome at commit 920e65b. Every case was a real keyboard paste. The box was read back after each paste and **nothing was sent**. ChatGPT ran in a temporary chat. Each case ran on its own on ChatGPT, and all five ran as one paste on Claude.ai and Gemini.
+
+| Case | ChatGPT | Claude.ai | Gemini |
+|---|---|---|---|
+| Lone first names after a label (table cell, JSON, `assigned:`) | pass | pass | pass |
+| Lowercase company names ("carthage textiles", "nile valley trading co.") | pass | pass | pass |
+| Phone stuck to a word (Tel0501..., phone_..., mob....) and "(+961) 03 123 456" | pass | pass | pass |
+| CSV with a CIN column, "Prof."/"Eng." titles, curly quotes | pass, no leak | pass, no leak | pass, no leak |
+| Ordinary sentence (Docker Compose, WhatsApp, TOEFL iBT, EGP 1,250) | unchanged | unchanged | unchanged |
+
+**No leaks.** "CIN" now stays visible, which fixes the live bug from 2026-11-08. All three sites gave the same output.
+
+**Wrong labels, nothing leaked (the same output comes from Node via `scripts/ner-debug.mjs`):**
+- "BK123456" under a CIN header is hidden as `[PERSON_n]`, not as an ID. The model tags "BK" as an organization at a low score.
+- "Rabat" in the same CSV row is hidden as a person (B-PER 0.89), not a place.
+- "Eng. Samir Haddad" becomes `[PERSON_n]` with the title inside the placeholder. The word piece "##g" is tagged B-PER at 0.53. "Prof." stays outside.
+
+**Test-tool trap:** the clipboard was overwritten between the copy and the paste once. Read `pbpaste` right before pasting.
+
+## Live typing check and third round of fixes (2026-11-10)
+
+**Typed text, live on ChatGPT.**
+- What was typed (temporary chat): "please email hiba zaqout at hiba.z@gmail.com, mobile 0770 123 4567, CIN BE467059".
+- Alan then pressed Option+Shift+A.
+- The box became "please email [PERSON_1] at [EMAIL_1], mobile [PHONE_1], CIN [ID_NUMBER_1]". No leak, and nothing was sent.
+- Claude's browser tool can't press Chrome extension shortcuts (Chrome handles them, and the page only gets the letter), so this step needs a person.
+- Cleaning on Enter or Send is left to the fake-page browser tests, because a live test would send a message.
+
+**Found while re-checking the wrong labels, now fixed:**
+1. **Leak:** a CSV with a "cin" column and two rows sent the second row's number ("AB654321") as typed. Values under a column header that names IDs or phones (cin, passport, civil ID, iqama, phone, mobile, رقم الهاتف...) are now IDs or phones in CSV, TSV and markdown tables (`src/core/columns.js`, 5 tests).
+2. **Titles:** "Contact Eng. Samir Haddad" hid "Eng" as its own person. "Signed: Eng. Samir Haddad" put the title inside the placeholder. Regional titles (Eng., Sheikh, Hajj, Ustaz, Kak, H.E.) are now never part of a name.
+
+**Still a wrong label, no leak:** a lone first name under a "Name" column header can be hidden as an organization ("| Rania | 5512 3456 |").
+
+**Suites:** 256 unit tests, 90 browser tests, all 47 scenarios, the eval (99.0% caught, 100% of safe phrases kept) and the stress suite (3,309 pass, 4 fail) all pass.

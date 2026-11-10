@@ -140,3 +140,12 @@ test('a name never starts on the dot of a title', () => {
   const tokens = [tok('Prof', 'O'), tok('.', 'B-PER', 0.6), tok('Abu', 'I-PER', 0.9), tok('Bakr', 'I-PER', 0.9)];
   assert.deepEqual(align(text, tokens), [['Abu Bakr', 'PERSON']]);
 });
+
+test('regional titles never become or join a name (found live: "Eng.")', () => {
+  const text = 'Signed: Eng. Samir Haddad';
+  const tokens = [tok('Sign', 'O'), tok('##ed', 'O'), tok(':', 'O'), tok('En', 'B-PER', 0.75), tok('##g', 'B-PER', 0.84), tok('.', 'B-PER', 0.97),
+    tok('Sami', 'B-PER', 0.97), tok('##r', 'B-PER', 0.96), tok('Had', 'I-PER', 1), tok('##dad', 'I-PER', 1)];
+  assert.deepEqual(align(text, tokens), [['Samir Haddad', 'PERSON']]);
+  assert.deepEqual(align('Contact Eng. Samir', [tok('Contact', 'O'), tok('En', 'O'), tok('##g', 'O'), tok('.', 'O'), tok('Sami', 'B-PER'), tok('##r', 'B-PER')]),
+    [['Samir', 'PERSON']]);
+});

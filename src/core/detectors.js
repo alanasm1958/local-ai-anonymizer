@@ -3,6 +3,7 @@
 // capture group to use as the span, and an optional validator.
 
 import { fitsRegionalPlan } from './phone-plans.js';
+import { columnSpans } from './columns.js';
 
 const digitsOnly = (s) => s.replace(/\D/g, '');
 
@@ -313,7 +314,7 @@ export function detectPatterns(text, enabledTypes) {
   const spans = DETECTORS
     .filter((d) => enabledTypes[d.type] === true)
     .flatMap((d) => [...matchDetector(text, d)]);
-  return dropContained(spans);
+  return dropContained([...spans, ...columnSpans(text, enabledTypes)]);
 }
 
 const PRIORITY_ORDER = [
