@@ -3,6 +3,7 @@
 // extension service worker.
 
 import { detectPatterns } from './detectors.js';
+import { columnPlaces, placeCells } from './columns.js';
 import { entitiesToSpans } from './llm.js';
 import { resolveSpans } from './spans.js';
 import { assignPlaceholders, PLACEHOLDER_RE } from './vault.js';
@@ -98,9 +99,28 @@ function preferPerson(candidates) {
   return candidates.map((e) => (e.type !== 'PERSON' && people.has(nameKey(e.text)) ? { ...e, type: 'PERSON' } : e));
 }
 
+// A cell in a city/country column is a place: the model read "Rabat" as a
+// person in a CSV row and as a place under its bar in an Office table (both
+// found live). Whatever else has that text is relabelled too, including
+// saved vault values, so an earlier mis-tag can't keep the wrong label.
+// Follows the model switch and the LOCATION type, like the org rule.
+function placeCandidates(text, settings) {
+  if (!settings.useModel || settings.modelTypes.LOCATION !== true) return [];
+  return placeCells(text).filter((t) => !isNeverEntity(t)).map((t) => ({ text: t, type: 'LOCATION' }));
+}
+
+function placesFromColumns(candidates, places, settings) {
+  if (places.size === 0 || settings.modelTypes.LOCATION !== true) return candidates;
+  return candidates.map((e) => (e.type !== 'LOCATION' && places.has(nameKey(e.text)) ? { ...e, type: 'LOCATION' } : e));
+}
+
 // Model spans plus exact repeats of known values plus lone name parts.
 function entitySpans(text, settings, vault, found) {
-  const candidates = preferPerson([...found, ...knownEntities(vault, settings)]);
+  const candidates = placesFromColumns(
+    preferPerson([...found, ...knownEntities(vault, settings), ...placeCandidates(text, settings)]),
+    columnPlaces(text),
+    settings,
+  );
   const owners = partOwners(candidates.filter((e) => e.type === 'PERSON').map((e) => e.text));
   // A lone "Maria" the model tagged itself is the known Maria Gonzalez, not
   // a new person: let the alias span (full name's placeholder) handle it.

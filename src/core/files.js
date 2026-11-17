@@ -9,6 +9,7 @@ import {
   hasNumericCells, rulesFor, blankThumbnail,
 } from './ooxml.js';
 import { PLACEHOLDER_RE } from './vault.js';
+import { sharedStringGrid } from './xlsx-grid.js';
 
 export { rewriteSegments, extractOoxmlText } from './ooxml.js';
 
@@ -141,12 +142,25 @@ function unzipChecked(bytes, zip, limit) {
 
 const decodeBase64 = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 
+function extractFor(xml, rule, ctx) {
+  if (rule.grid) return sharedStringGrid(xml, ctx.sheets ?? []);
+  return rule.tag ? extractSegments(xml, rule.tag, rule.breaks, rule.table) : extractAttributeSegments(xml, rule.pattern);
+}
+
+const SHEET_PATH = /^xl\/worksheets\/sheet(\d+)\.xml$/;
+
+// Sheet XML in sheet order, read before any part is rewritten.
+const sheetsOf = (entries, paths, zip) => paths
+  .filter((p) => SHEET_PATH.test(p))
+  .sort((a, b) => Number(SHEET_PATH.exec(a)[1]) - Number(SHEET_PATH.exec(b)[1]))
+  .map((p) => zip.strFromU8(entries[p]));
+
 // Applies every rule for one part; returns the new XML (or the same string).
 async function cleanPart(xml, rules, ctx) {
   if (xml.includes('<![CDATA[')) throw new FormatError('it contains text stored in a way that can\'t be checked');
   let current = xml;
   for (const rule of rules) {
-    const extracted = rule.tag ? extractSegments(current, rule.tag, rule.breaks) : extractAttributeSegments(current, rule.pattern);
+    const extracted = extractFor(current, rule, ctx);
     ctx.textChars += extracted.text.length;
     if (ctx.textChars > MAX_TEXT_CHARS) throw new FormatError('it has too much text to check');
     if (!extracted.text.trim()) continue;
@@ -164,6 +178,7 @@ async function handleOoxml(bytes, ctx, kind) {
   const paths = Object.keys(entries);
   let changed = false;
   ctx.textChars = 0;
+  ctx.sheets = kind === 'xlsx' ? sheetsOf(entries, paths, zip) : [];
   for (const path of paths) {
     const blank = ctx.mode === 'clean' ? blankThumbnail(path) : null;
     if (blank) {

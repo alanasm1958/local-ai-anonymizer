@@ -230,7 +230,14 @@ The extension was reloaded in Alan's Chrome at commit 920e65b. Every case was a 
 - "Rabat" in the same CSV row is hidden as a person (B-PER 0.89), not a place.
 - "Eng. Samir Haddad" becomes `[PERSON_n]` with the title inside the placeholder. The word piece "##g" is tagged B-PER at 0.53. "Prof." stays outside.
 
-**Test-tool trap:** the clipboard was overwritten between the copy and the paste once. Read `pbpaste` right before pasting.
+**Fixed the same day (all three, in Node with the real model; Chrome needs a reload to get them):**
+- "BK123456" is now `[ID_NUMBER_n]`: cells under an ID header (CIN, passport, civil ID...) are IDs (`columns.js`, commit fb3733e).
+- "Eng." stays visible: regional titles (Eng., Sheikh, Hajj, Ustaz, Kak, H.E.) never join a name (commit fb3733e).
+- "Rabat" is now `[LOCATION_n]`: a person or company the model finds in a city, country or location column is labelled a place, including values saved earlier in the session. This only changes the label and never hides more text.
+
+Unit tests 258/258, scenarios 47/47, stress 3,309 pass with the same 4 known failures, lint clean.
+
+**Test-tool trap:** the clipboard was overwritten between the copy and the paste once (a second session was pasting at the same time). Read `pbpaste` right before pasting, and run one live-test session at a time.
 
 ## Live typing check and third round of fixes (2026-11-10)
 
@@ -248,3 +255,22 @@ The extension was reloaded in Alan's Chrome at commit 920e65b. Every case was a 
 **Still a wrong label, no leak:** a lone first name under a "Name" column header can be hidden as an organization ("| Rania | 5512 3456 |").
 
 **Suites:** 256 unit tests, 90 browser tests, all 47 scenarios, the eval (99.0% caught, 100% of safe phrases kept) and the stress suite (3,309 pass, 4 fail) all pass.
+
+## Tables in attached files, live on ChatGPT (2026-11-10)
+
+Alan asked for a table in an attached file. The test files hold the same fake table (names in three casings, CIN, Moroccan and Lebanese phones, emails, cities) as .csv, .xlsx (openpyxl) and .docx (python-docx). Each was attached in a ChatGPT temporary chat through the "Attach files" input, and **no message was sent**. The file ChatGPT's own change handler received was captured in the page and unzipped to read every part.
+
+| File | Live result | With a fresh vault (Node, real model) before the fix |
+|---|---|---|
+| CSV | all 15 values hidden | all hidden |
+| Excel | all hidden, cities labelled person/company | **3 CINs leaked**, Rabat and Fes leaked |
+| Word | all hidden, cities labelled person/company | **3 CINs leaked**, plus "HADDAD" and "Beirut" |
+
+**The live Office results only looked clean because the vault held the CSV values from the upload a minute earlier.** Office text reached detection one cell per line, so the "CIN" header lost its column and the model saw names without their rows.
+
+**Fixed:**
+- Word and PowerPoint tables and inline Excel cells are read as rows of tab-separated cells, like a TSV (`ooxml.js`).
+- Excel shared strings (how Excel stores text) are laid out in sheet order (`xlsx-grid.js`).
+- A cell under a city, country or similar header is hidden as a place even when the model is unsure ("Rabat" was LOC 0.50 in a tab row, under the 0.6 bar). Filler like "n/a" or "Remote" stays.
+
+After the fix, all three files come out with every value hidden and a fresh vault. Unit tests 266/266, browser tests 90/90, scenarios 47/47, stress 3,309 pass with the same 4 known failures, lint clean. Still to do: a live re-check after the extension is reloaded.

@@ -1,6 +1,6 @@
 # Privacy practices tab: answers to paste
 
-These are the Developer Dashboard **Privacy practices** fields, in order. Each answer was checked against the code in v0.4.0 (`manifest.json`, `src/background/`, `src/content/`, `src/offscreen/`).
+These are the Developer Dashboard **Privacy practices** fields, in order. Each answer was checked against the code in v0.5.0 (`manifest.json`, `src/background/`, `src/content/`, `src/offscreen/`).
 
 ## Single purpose description
 

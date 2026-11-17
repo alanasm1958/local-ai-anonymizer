@@ -222,3 +222,22 @@ test('one name in different casing gets one placeholder even when the model type
   const { text } = await anonymize('Ask Omar Farouk. OMAR FAROUK will call.', { settings: DEFAULT_SETTINGS, vault: createVault(), detectEntities });
   assert.equal(text, 'Ask [PERSON_1]. [PERSON_1] will call.');
 });
+
+test('a person or company the model found under a place header becomes a place', async () => {
+  const text = 'name,city\nYoussef Amrani,Rabat';
+  const detectEntities = async () => [{ text: 'Youssef Amrani', type: 'PERSON' }, { text: 'Rabat', type: 'PERSON' }];
+  const first = await anonymize(text, { settings: DEFAULT_SETTINGS, vault: createVault(), detectEntities });
+  assert.equal(first.text, 'name,city\n[PERSON_1],[LOCATION_1]');
+  // A mis-tag saved earlier in the session is relabelled too.
+  const earlier = await anonymize('Rabat', { settings: DEFAULT_SETTINGS, vault: createVault(), detectEntities: async () => [{ text: 'Rabat', type: 'PERSON' }] });
+  const second = await anonymize(text, { settings: DEFAULT_SETTINGS, vault: earlier.vault, detectEntities });
+  assert.match(second.text, /,\[LOCATION_1\]$/);
+});
+
+test('a cell under a place header is hidden as a place even when the model misses it', async () => {
+  const text = 'name\tcity\nYoussef\tRabat\nSalma\tn/a';
+  const out = await anonymize(text, { settings: DEFAULT_SETTINGS, vault: createVault(), detectEntities: async () => [] });
+  assert.equal(out.text, 'name\tcity\nYoussef\t[LOCATION_1]\nSalma\tn/a');
+  const off = { ...DEFAULT_SETTINGS, modelTypes: { ...DEFAULT_SETTINGS.modelTypes, LOCATION: false } };
+  assert.equal((await anonymize(text, { settings: off, vault: createVault(), detectEntities: async () => [] })).text, text);
+});

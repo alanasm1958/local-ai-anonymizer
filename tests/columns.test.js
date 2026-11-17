@@ -2,7 +2,7 @@
 // Found live: the second row's CIN in a CSV with a "cin" column was sent as typed.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { columnSpans } from '../src/core/columns.js';
+import { columnSpans, columnPlaces } from '../src/core/columns.js';
 import { detectPatterns } from '../src/core/detectors.js';
 import { DEFAULT_SETTINGS } from '../src/core/settings.js';
 
@@ -35,4 +35,13 @@ test('the column rule is part of detectPatterns and follows the type switches', 
   const text = 'name,cin\nSalma,BK123456\nOmar,AB654321';
   assert.equal(detectPatterns(text, TYPES).filter((s) => s.type === 'ID_NUMBER').length, 2);
   assert.deepEqual(columnSpans(text, { ...TYPES, ID_NUMBER: false }), []);
+});
+
+test('cells under a place header are listed as places (found live: "Rabat" hidden as a person)', () => {
+  const places = (text) => [...columnPlaces(text)].sort();
+  assert.deepEqual(places('name,CIN,city\nYoussef Amrani,BK123456,Rabat\nSalma Bennani,AB654321,Fes'), ['fes', 'rabat']);
+  assert.deepEqual(places('| Name | Country |\n|---|---|\n| Noura | Kuwait |'), ['kuwait']);
+  assert.deepEqual(places('الاسم,المدينة\nRania,Erbil'), ['erbil']);
+  assert.deepEqual(places('name,city\nSalma,123\nOmar,n/a\nAli,Remote'), []);
+  assert.deepEqual(places('The city, as usual, was busy.'), []);
 });
