@@ -3,13 +3,15 @@
 // extension service worker.
 
 import { detectPatterns } from './detectors.js';
+import { columnPlaces, placeCells } from './columns.js';
 import { entitiesToSpans } from './llm.js';
 import { resolveSpans } from './spans.js';
 import { assignPlaceholders, PLACEHOLDER_RE } from './vault.js';
 import { enabledTypes } from './settings.js';
 import { nameAliasSpans, partOwners } from './names.js';
 import { orgSuffixSpans } from './orgs.js';
-import { NEVER_ENTITIES } from './ner.js';
+import { isNeverEntity } from './ner.js';
+import { detectionView } from './normalize.js';
 
 const MIN_KNOWN_LENGTH = 3;
 
@@ -80,14 +82,45 @@ const typeOf = (placeholder) => /^\[([A-Z][A-Z_]*?)_\d+\]$/.exec(placeholder)?.[
 function knownEntities(vault, settings) {
   if (!settings.useModel) return [];
   return Object.entries(vault.byPlaceholder)
-    .map(([placeholder, value]) => ({ text: value, type: typeOf(placeholder) }))
+    // Matched in the detection copy, so a value first pasted with an
+    // invisible character inside ("Om\u200bar") is still found later.
+    .map(([placeholder, value]) => ({ text: detectionView(value).text, type: typeOf(placeholder) }))
     .filter((e) => settings.modelTypes[e.type] === true
-      && e.text.length >= MIN_KNOWN_LENGTH && !NEVER_ENTITIES.has(e.text));
+      && e.text.length >= MIN_KNOWN_LENGTH && !isNeverEntity(e.text));
+}
+
+const nameKey = (value) => value.trim().replace(/\s+/g, ' ').toLowerCase();
+
+// The model can read one name differently by case ("OMAR FAROUK" as an
+// organization next to the person "Omar Farouk"). The person reading wins,
+// so every spelling shares one placeholder.
+function preferPerson(candidates) {
+  const people = new Set(candidates.filter((e) => e.type === 'PERSON').map((e) => nameKey(e.text)));
+  return candidates.map((e) => (e.type !== 'PERSON' && people.has(nameKey(e.text)) ? { ...e, type: 'PERSON' } : e));
+}
+
+// A cell in a city/country column is a place: the model read "Rabat" as a
+// person in a CSV row and as a place under its bar in an Office table (both
+// found live). Whatever else has that text is relabelled too, including
+// saved vault values, so an earlier mis-tag can't keep the wrong label.
+// Follows the model switch and the LOCATION type, like the org rule.
+function placeCandidates(text, settings) {
+  if (!settings.useModel || settings.modelTypes.LOCATION !== true) return [];
+  return placeCells(text).filter((t) => !isNeverEntity(t)).map((t) => ({ text: t, type: 'LOCATION' }));
+}
+
+function placesFromColumns(candidates, places, settings) {
+  if (places.size === 0 || settings.modelTypes.LOCATION !== true) return candidates;
+  return candidates.map((e) => (e.type !== 'LOCATION' && places.has(nameKey(e.text)) ? { ...e, type: 'LOCATION' } : e));
 }
 
 // Model spans plus exact repeats of known values plus lone name parts.
 function entitySpans(text, settings, vault, found) {
-  const candidates = [...found, ...knownEntities(vault, settings)];
+  const candidates = placesFromColumns(
+    preferPerson([...found, ...knownEntities(vault, settings), ...placeCandidates(text, settings)]),
+    columnPlaces(text),
+    settings,
+  );
   const owners = partOwners(candidates.filter((e) => e.type === 'PERSON').map((e) => e.text));
   // A lone "Maria" the model tagged itself is the known Maria Gonzalez, not
   // a new person: let the alias span (full name's placeholder) handle it.
@@ -99,21 +132,32 @@ function entitySpans(text, settings, vault, found) {
     .filter((s) => !insideAny(s, reserved));
 }
 
+// A span found in the detection copy, moved onto the original text. Its
+// value is the original characters, so restore gives back exactly what was pasted.
+function toOriginalSpan(text, span, view) {
+  const { start, end } = view.toOriginal(span.start, span.end);
+  return { ...span, start, end, value: text.slice(start, end) };
+}
+
 // `site` is the host the text is being pasted into (omit for extension pages).
 export async function anonymize(text, { settings, vault, detectEntities, site }) {
   if (!text) return { text, vault, replacements: [], warnings: [] };
 
-  const patternSpans = detectPatterns(text, settings.patternTypes);
+  // Rules and model read a copy with plain digits and no invisible
+  // characters; spans are mapped back onto the original text.
+  const view = detectionView(text);
+  const patternSpans = detectPatterns(view.text, settings.patternTypes);
   const warnings = [];
   let found = [];
   try {
-    found = await detectWithModel(text, settings, detectEntities);
+    found = await detectWithModel(view.text, settings, detectEntities);
   } catch (err) {
     if (settings.onModelError === 'cancel') throw err;
     warnings.push(`Local model unavailable, only patterns were used: ${err.message}`);
   }
 
-  const spans = [...patternSpans, ...entitySpans(text, settings, vault, found)];
+  const viewSpans = [...patternSpans, ...entitySpans(view.text, settings, vault, found)];
+  const spans = view.changed ? viewSpans.map((span) => toOriginalSpan(text, span, view)) : viewSpans;
   const result = applySpans(text, spans, vault, { site });
   return { ...result, warnings };
 }

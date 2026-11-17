@@ -1,0 +1,8 @@
+# Same line endings on every platform (Windows checkouts would otherwise get CRLF).
+* text=auto eol=lf
+*.png binary
+*.docx binary
+*.xlsx binary
+*.pptx binary
+*.onnx binary
+*.wasm binary

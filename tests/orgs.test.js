@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { budget } from './helpers/timing.js';
 import { orgSuffixSpans } from '../src/core/orgs.js';
 
 const found = (text) => orgSuffixSpans(text).map((s) => s.value);
@@ -33,7 +34,7 @@ test('spans carry offsets and the ORGANIZATION type', () => {
 test('long runs of capitalized words stay fast', () => {
   const started = Date.now();
   orgSuffixSpans('Alpha '.repeat(50000));
-  assert.ok(Date.now() - started < 500);
+  assert.ok(Date.now() - started < budget(500));
 });
 
 // Found by review: ordinary Title Case phrases are not organizations.

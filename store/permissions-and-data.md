@@ -1,6 +1,6 @@
 # Privacy practices tab: answers to paste
 
-These are the Developer Dashboard **Privacy practices** fields, in order. Each answer was checked against the code in v0.4.0 (`manifest.json`, `src/background/`, `src/content/`, `src/offscreen/`).
+These are the Developer Dashboard **Privacy practices** fields, in order. Each answer was checked against the code in v0.5.0 (`manifest.json`, `src/background/`, `src/content/`, `src/offscreen/`).
 
 ## Single purpose description
 
@@ -61,7 +61,7 @@ Requested at runtime only when the user explicitly adds a site to protect (for e
 ### Content scripts (if asked about the matched sites)
 
 ```
-The content script runs on the AI chat sites listed in the manifest (chatgpt.com, chat.openai.com, claude.ai, gemini.google.com, copilot.microsoft.com, perplexity.ai, chat.deepseek.com, chat.mistral.ai, grok.com, poe.com). It intercepts paste, drop and file-upload events so text and supported files can be anonymized on the device before the site receives them, and shows the real values in the AI's reply on the user's screen. It looks for placeholders such as [PERSON_1] in the page only to display them, and never sends page content off the device.
+The content script runs on the AI chat sites listed in the manifest (chatgpt.com, chat.openai.com, claude.ai, gemini.google.com, copilot.microsoft.com, perplexity.ai, chat.deepseek.com, chat.mistral.ai, grok.com, poe.com). It intercepts paste, drop and file-upload events, and holds Enter and Send when typed text contains sensitive data, so text and supported files can be anonymized on the device before the site receives them, and shows the real values in the AI's reply on the user's screen. It looks for placeholders such as [PERSON_1] in the page only to display them, and never sends page content off the device.
 ```
 
 ### Content Security Policy: 'wasm-unsafe-eval' (if asked)
@@ -87,7 +87,7 @@ Check these data types:
 - [x] **Personally identifiable information** (names, emails, phone numbers, addresses, ID numbers in pasted text)
 - [x] **Financial and payment information** (card numbers and IBANs in pasted text)
 - [x] **Authentication information** (passwords, API keys and tokens in pasted text)
-- [x] **Website content** (the text and files the user pastes, drops or uploads into AI chat sites)
+- [x] **Website content** (the text and files the user pastes, drops, types or uploads into AI chat sites)
 
 If asked for details, use:
 

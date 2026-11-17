@@ -13,7 +13,7 @@ import { chromium } from 'playwright-core';
 import { unzipSync, strFromU8 } from 'fflate';
 import { extractOoxmlText } from '../../src/core/ooxml.js';
 import { startMockOllama } from '../helpers/mock-ollama.js';
-import { startRecordingProxy } from '../helpers/recording-proxy.js';
+import { startRecordingProxy, unexpectedHosts } from '../helpers/recording-proxy.js';
 
 // EXTENSION_PATH lets the suite run against an unzipped release package.
 const EXTENSION_PATH = process.env.EXTENSION_PATH ?? fileURLToPath(new URL('../../', import.meta.url));
@@ -292,6 +292,42 @@ test('rich-text-only paste is converted to text and anonymized', async () => {
   await page.close();
 });
 
+// Editors such as TinyMCE put the text box in an about:blank or srcdoc
+// frame. Those frames have no hostname of their own and belong to the page.
+for (const kind of ['srcdoc', 'about:blank']) {
+  test(`paste into a text box inside an ${kind} iframe is anonymized`, async () => {
+    const page = await openChat();
+    await page.evaluate((k) => new Promise((resolve) => {
+      const frame = document.createElement('iframe');
+      const body = '<textarea id="t"></textarea>';
+      if (k === 'srcdoc') {
+        frame.srcdoc = body;
+        frame.onload = resolve;
+        document.body.append(frame);
+      } else {
+        document.body.append(frame);
+        frame.contentDocument.body.innerHTML = body;
+        resolve();
+      }
+    }), kind);
+    await page.waitForTimeout(500);
+    const frame = page.frames().find((f) => f !== page.mainFrame());
+    await frame.evaluate((t) => {
+      window.sawRaw = false;
+      const area = document.getElementById('t');
+      area.addEventListener('paste', (e) => { if (e.clipboardData.getData('text/plain').includes('Maria Gonzalez')) window.sawRaw = true; });
+      area.focus();
+      const data = new DataTransfer();
+      data.setData('text/plain', t);
+      area.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true, composed: true }));
+    }, SECRET_TEXT);
+    await frame.waitForFunction(() => document.getElementById('t').value.includes('[PERSON_'), null, { timeout: 30000 });
+    assertClean(await frame.evaluate(() => document.getElementById('t').value));
+    assert.equal(await frame.evaluate(() => window.sawRaw), false, 'the frame saw the raw text');
+    await page.close();
+  });
+}
+
 test('paste into a password field is left to the browser', async () => {
   const page = await openChat();
   const prevented = await page.evaluate(() => window.firePaste('pw', 'hunter2-secret-pass'));
@@ -546,11 +582,6 @@ test('pasting on a site the user paused leaves text untouched', async () => {
 });
 
 test('the extension makes no outbound network requests', () => {
-  // A proxy can't tell who asked, so allow only what is known not to be the
-  // extension: Chrome's own background services, and the connection Chrome
-  // opens to the fake AI sites before context.route serves them. Any other
-  // host (a model hub, a CDN, an analytics endpoint) fails the test.
-  const BROWSER_OR_TEST = /(^|\.)(google\.com|googleapis\.com|gstatic\.com|chatgpt\.com|claude\.ai)(:\d+)?$/;
-  const unexpected = [...new Set(proxy.hosts)].filter((host) => !BROWSER_OR_TEST.test(host));
+  const unexpected = unexpectedHosts(proxy.hosts);
   assert.deepEqual(unexpected, [], `unexpected outbound hosts: ${unexpected.join(', ')}`);
 });

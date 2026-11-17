@@ -27,18 +27,39 @@ const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // Paragraph ends become "\n" and tabs "\t" in the extracted text, so
 // detection sees real sentence boundaries; those characters belong to no element.
-function scanner(textTag, breakTags) {
-  const t = escapeRe(textTag);
-  const breaks = breakTags.map(escapeRe).join('|');
-  return new RegExp(`(<${t}(?:\\s[^<>]{0,1000})?>)([^<]*)(</${t}>)|</(?:${breaks})>|<(?:w:tab|a:tab)\\s{0,10}/>`, 'g');
+// `table` ({ cell, row }) also turns table cells into "\t" and rows into
+// "\n", so a table reads like a TSV (found live: a "CIN" column in a .docx
+// was read one cell per line and its IDs were sent as typed).
+// Between a closing tag and the cell/row end only tags may sit (cell
+// properties, empty runs), never text and never the start of another cell.
+function tableBreaks(table, breaks) {
+  if (!table) return [];
+  const cell = escapeRe(table.cell);
+  const row = escapeRe(table.row);
+  const filler = `(?:\\s{0,20}<(?!${cell}[\\s>/])[^<>]{0,1000}>){0,40}?\\s{0,20}`;
+  const end = breaks ? `</(?:${breaks})>${filler}` : '';
+  return [`${end}</${cell}>${filler}</${row}>`, `${end}</${cell}>`, `</${cell}>${filler}</${row}>`, `</${cell}>`];
 }
 
-export function extractSegments(xml, textTag, breakTags) {
+function scanner(textTag, breakTags, table) {
+  const t = escapeRe(textTag);
+  const breaks = breakTags.map(escapeRe).join('|');
+  const tableAlts = tableBreaks(table, breaks).map((alt) => `${alt}|`).join('');
+  return new RegExp(`(<${t}(?:\\s[^<>]{0,1000})?>)([^<]*)(</${t}>)|${tableAlts}</(?:${breaks})>|<(?:w:tab|a:tab)\\s{0,10}/>`, 'g');
+}
+
+function breakChar(match, table) {
+  if (table && match.includes(`</${table.row}>`)) return '\n';
+  if (table && match.includes(`</${table.cell}>`)) return '\t';
+  return match.includes('tab') ? '\t' : '\n';
+}
+
+export function extractSegments(xml, textTag, breakTags, table) {
   const segments = [];
   let text = '';
-  for (const m of xml.matchAll(scanner(textTag, breakTags))) {
+  for (const m of xml.matchAll(scanner(textTag, breakTags, table))) {
     if (m[1] === undefined) {
-      text += m[0].includes('tab') ? '\t' : '\n';
+      text += breakChar(m[0], table);
       continue;
     }
     const value = unescapeXml(m[2]);
@@ -80,12 +101,17 @@ export function extractAttributeSegments(xml, pattern) {
 // New text for each segment. Each span (a value and its replacement) is
 // written into the first segment it overlaps; its characters in later
 // segments are dropped. Spans must not overlap. One pass over both sorted
-// lists, so tens of thousands of replacements stay fast.
+// lists, so tens of thousands of replacements stay fast. Segments may come
+// in any text order (Excel shared strings are laid out by sheet); the
+// result follows the order given.
 export function rewriteSegments(text, segments, spans) {
   const sorted = [...spans].sort((a, b) => a.start - b.start);
+  const order = segments.map((_, i) => i).sort((a, b) => segments[a].start - segments[b].start);
   const placed = new Uint8Array(sorted.length);
+  const contents = new Array(segments.length);
   let first = 0;
-  return segments.map((seg) => {
+  order.forEach((i) => {
+    const seg = segments[i];
     while (first < sorted.length && sorted[first].end <= seg.start) first += 1;
     let out = '';
     let cursor = seg.start;
@@ -98,8 +124,9 @@ export function rewriteSegments(text, segments, spans) {
       }
       cursor = Math.max(cursor, Math.min(span.end, seg.end));
     }
-    return out + text.slice(cursor, seg.end);
+    contents[i] = out + text.slice(cursor, seg.end);
   });
+  return contents;
 }
 
 // Word and Excel collapse leading/trailing spaces unless told to keep them.
@@ -128,9 +155,13 @@ export function spliceSegments(xml, { text, segments }, contents, tag) {
 
 // ---------- which parts hold text ----------
 
-const textRule = (path, tag, breaks) => ({ path, tag, breaks });
+const textRule = (path, tag, breaks, table) => ({ path, tag, breaks, table });
+// Excel shared strings, laid out as the sheets show them (xlsx-grid.js).
+const gridRule = (path) => ({ path, tag: 't', grid: true });
 const attrRule = (path, pattern) => ({ path, pattern });
 
+const WORD_TABLE = Object.freeze({ cell: 'w:tc', row: 'w:tr' });
+const DRAWING_TABLE = Object.freeze({ cell: 'a:tc', row: 'a:tr' });
 const WORD_TEXT_PARTS = /^word\/(document|header\d*|footer\d*|footnotes|endnotes|comments|glossary\/document)\.xml$/;
 const EXTERNAL_TARGET = /<Relationship\b(?=[^<>]{0,2000}\bTargetMode="External")[^<>]{0,2000}?\sTarget="([^"]*)"/gd;
 const RELS = /(^|\/)_rels\/[^/]+\.rels$/;
@@ -139,7 +170,7 @@ const APP_TITLES = textRule(/^docProps\/app\.xml$/, 'vt:lpstr', ['vt:lpstr']);
 // Rules per format; every rule whose path matches is applied to that part.
 export const OOXML_RULES = Object.freeze({
   docx: [
-    textRule(WORD_TEXT_PARTS, 'w:t', ['w:p']),
+    textRule(WORD_TEXT_PARTS, 'w:t', ['w:p'], WORD_TABLE),
     textRule(WORD_TEXT_PARTS, 'w:delText', ['w:p']), // text kept by tracked deletions
     textRule(WORD_TEXT_PARTS, 'w:instrText', ['w:p']), // field codes, e.g. HYPERLINK "mailto:..."
     attrRule(WORD_TEXT_PARTS, /<w:fldSimple\b[^<>]{0,1000}?\sw:instr="([^"]*)"/gd),
@@ -148,7 +179,7 @@ export const OOXML_RULES = Object.freeze({
     APP_TITLES,
   ],
   pptx: [
-    textRule(/^ppt\/(slides\/slide|notesSlides\/notesSlide)\d+\.xml$/, 'a:t', ['a:p']),
+    textRule(/^ppt\/(slides\/slide|notesSlides\/notesSlide)\d+\.xml$/, 'a:t', ['a:p'], DRAWING_TABLE),
     textRule(/^ppt\/diagrams\/data\d*\.xml$/, 'a:t', ['a:p']),
     textRule(/^ppt\/comments\/comment\d+\.xml$/, 'p:text', ['p:cm']),
     textRule(/^ppt\/comments\/modernComment[^/]*\.xml$/, 'a:t', ['a:p']),
@@ -156,8 +187,8 @@ export const OOXML_RULES = Object.freeze({
     APP_TITLES,
   ],
   xlsx: [
-    textRule(/^xl\/sharedStrings\.xml$/, 't', ['si']),
-    textRule(/^xl\/worksheets\/sheet\d+\.xml$/, 't', ['is']),
+    gridRule(/^xl\/sharedStrings\.xml$/),
+    textRule(/^xl\/worksheets\/sheet\d+\.xml$/, 't', ['is'], { cell: 'c', row: 'row' }),
     textRule(/^xl\/comments\d*\.xml$/, 't', ['comment']),
     textRule(/^xl\/threadedComments\/[^/]+\.xml$/, 'text', ['threadedComment']),
     // Pivot caches keep their own copy of the source data.

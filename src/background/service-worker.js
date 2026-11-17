@@ -56,14 +56,20 @@ function requireText(text) {
 
 const isExtensionPage = (sender) => sender.url?.startsWith(chrome.runtime.getURL(''));
 
+const hostOf = (url) => {
+  try {
+    return normalizeHost(new URL(url).hostname);
+  } catch {
+    return '';
+  }
+};
+
 // The host a content script runs on, or ANY_SITE for the extension's own pages.
+// about:blank and srcdoc frames have no host in their URL: their origin, or
+// failing that the tab's page, says which site they belong to.
 function siteOf(sender) {
   if (isExtensionPage(sender)) return ANY_SITE;
-  try {
-    return normalizeHost(new URL(sender.url).hostname) || 'unknown';
-  } catch {
-    return 'unknown';
-  }
+  return hostOf(sender.url) || hostOf(sender.origin) || hostOf(sender.tab?.url) || 'unknown';
 }
 
 async function handleAnonymize({ text }, sender) {
@@ -86,6 +92,17 @@ async function handleAnonymize({ text }, sender) {
       summary: { ...summary, breakdown: formatBreakdown(summary.byType) },
     };
   }));
+}
+
+// Read-only check of typed text: the same detection, but nothing is saved
+// (no placeholders, no stats), so half-typed words never reach the vault.
+async function handleScan({ text }, sender) {
+  const input = requireText(text);
+  const settings = await getSettings();
+  const result = await keepAlive(async () => anonymize(input, {
+    settings, vault: await getVault(), detectEntities: clientFor(settings).detectEntities, site: siteOf(sender),
+  }));
+  return { found: result.replacements.length, warnings: result.warnings.length };
 }
 
 // ---------- files ----------
@@ -167,6 +184,7 @@ async function handleSiteStatus({ hostname }) {
   return {
     active: isSiteEnabled(settings, hostname),
     interceptPaste: settings.interceptPaste,
+    checkTyping: settings.checkTyping,
     restoreReplies: settings.restoreReplies,
     checkFiles: settings.checkFiles,
     holdUncheckedFiles: settings.holdUncheckedFiles,
@@ -215,6 +233,7 @@ async function handleClearVault() {
 // protection needs. The vault and settings are for extension pages only.
 const CONTENT_HANDLERS = Object.freeze({
   anonymize: handleAnonymize,
+  scan: handleScan,
   restore: handleRestore,
   siteStatus: handleSiteStatus,
   lookup: handleLookup,

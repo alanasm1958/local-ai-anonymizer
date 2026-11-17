@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { budget } from './helpers/timing.js';
 import { detectPatterns, luhnValid, ibanValid, isIPv6 } from '../src/core/detectors.js';
 
 const ALL = {
@@ -40,6 +41,16 @@ test('detects phone numbers but not dates or short numbers', () => {
   assert.deepEqual(values('Call 07700 900123'), [['PHONE', '07700 900123']]);
   assert.deepEqual(values('Meeting on 2026-10-24 at 10:30'), []);
   assert.deepEqual(values('Order 12345 shipped'), []);
+});
+
+test('short unformatted numbers count as phones only after a phone word', () => {
+  assert.deepEqual(values('my phone number is 888999000'), [['PHONE', '888999000']]);
+  assert.deepEqual(values('Mobile: 7701234'), [['PHONE', '7701234']]);
+  assert.deepEqual(values('WhatsApp me on 964 7701 234'), [['PHONE', '964 7701 234']]);
+  assert.deepEqual(values('tel. 555123456'), [['PHONE', '555123456']]);
+  assert.deepEqual(values('The budget is 888999000'), []);
+  assert.deepEqual(values('phone 1234'), []);
+  assert.deepEqual(values('telephone number is 2026-10-24'), []);
 });
 
 test('detects only Luhn-valid credit cards', () => {
@@ -127,7 +138,7 @@ test('pathological 200k inputs finish quickly (no ReDoS)', () => {
   for (const input of ['a.'.repeat(100000), '12-'.repeat(66000), `a@${'b.'.repeat(100000)}`, 'a-'.repeat(100000)]) {
     const started = Date.now();
     detectPatterns(input, { ...ALL, ...EXTRA });
-    assert.ok(Date.now() - started < 1500, `took ${Date.now() - started}ms on ${input.slice(0, 6)}...`);
+    assert.ok(Date.now() - started < budget(1500), `took ${Date.now() - started}ms on ${input.slice(0, 6)}...`);
   }
 });
 
@@ -191,6 +202,6 @@ test('keyword gaps cannot be stretched into quadratic backtracking', () => {
   for (const input of [`id${' '.repeat(100000)}x`, `born${' '.repeat(100000)}x`, `1${' '.repeat(100000)}x`, `Passport No.${' '.repeat(100000)}x`]) {
     const started = Date.now();
     detectPatterns(input, { ...ALL, ...EXTRA });
-    assert.ok(Date.now() - started < 500, `took ${Date.now() - started}ms on ${input.slice(0, 8)}...`);
+    assert.ok(Date.now() - started < budget(500), `took ${Date.now() - started}ms on ${input.slice(0, 8)}...`);
   }
 });

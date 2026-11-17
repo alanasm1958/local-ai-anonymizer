@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { budget } from './helpers/timing.js';
 import { readFileSync, readdirSync } from 'node:fs';
 import * as fflate from 'fflate';
 import {
@@ -404,14 +405,14 @@ test('rewriteSegments stays fast with tens of thousands of replacements', () => 
   const spans = Array.from({ length: n }, (_, i) => ({ start: i * 3, end: i * 3 + 2, text: 'X' }));
   const started = Date.now();
   const out = rewriteSegments(text, segments, spans);
-  assert.ok(Date.now() - started < 500, `took ${Date.now() - started}ms`);
+  assert.ok(Date.now() - started < budget(500), `took ${Date.now() - started}ms`);
   assert.equal(out[0], 'X ');
 });
 
 test('malformed XML cannot make the scanner hang', () => {
   const started = Date.now();
   extractOoxmlText(`<w:t ${'a '.repeat(200000)}`, 'w:t', ['w:p']);
-  assert.ok(Date.now() - started < 500, `took ${Date.now() - started}ms`);
+  assert.ok(Date.now() - started < budget(500), `took ${Date.now() - started}ms`);
 });
 
 test('hyphenated file names are cleaned and restored with their separators', async () => {

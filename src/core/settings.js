@@ -53,6 +53,7 @@ const typeMap = (types, enabledByDefault) =>
 export const DEFAULT_SETTINGS = Object.freeze({
   enabled: true,
   interceptPaste: true,
+  checkTyping: true,
   restoreReplies: true,
   checkFiles: true,
   holdUncheckedFiles: true,
@@ -117,6 +118,7 @@ export function mergeSettings(stored) {
   return {
     enabled: pickBool(s.enabled, DEFAULT_SETTINGS.enabled),
     interceptPaste: pickBool(s.interceptPaste, DEFAULT_SETTINGS.interceptPaste),
+    checkTyping: pickBool(s.checkTyping, DEFAULT_SETTINGS.checkTyping),
     restoreReplies: pickBool(s.restoreReplies, DEFAULT_SETTINGS.restoreReplies),
     checkFiles: pickBool(s.checkFiles, DEFAULT_SETTINGS.checkFiles),
     holdUncheckedFiles: pickBool(s.holdUncheckedFiles, DEFAULT_SETTINGS.holdUncheckedFiles),

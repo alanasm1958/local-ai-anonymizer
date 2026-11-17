@@ -15,7 +15,7 @@ You see:        Dear Ahmed Al-Rashid, thank you for reaching out on behalf of Gu
 
 | Layer | Detects | How |
 |-------|---------|-----|
-| **1. Rules** (exact, instant) | Emails, phone numbers, credit cards (checksum verified), IBANs (checksum verified), US SSNs, IP addresses, API keys and passwords, private keys, dates of birth (after "DOB", "born on"), ID / passport / account / case numbers (after those words), street addresses, UK postcodes and US state + ZIP, URLs (off by default) | Regular expressions with validators |
+| **1. Rules** (exact, instant) | Emails, phone numbers (numbering plans for 18 Middle East and North Africa countries, local or international, Arabic-Indic and Persian digits too), credit cards (checksum verified), IBANs (checksum verified, any case), US SSNs, IP addresses, API keys and passwords, private keys, dates of birth (after "DOB", "born on", تاريخ الميلاد), ID / passport / national ID / civil ID / iqama / CIN / account / case numbers (after those words, in English or Arabic), street addresses, UK postcodes and US state + ZIP, URLs (off by default) | Regular expressions with validators |
 | **2. Built-in model** (default) | People, companies and organizations, places | DistilBERT-NER (English, 66 MB), runs in the browser with Transformers.js |
 | **2b. Ollama** (optional) | All of the above plus addresses and ID numbers written in free text | Any model you run with Ollama, LM Studio or another OpenAI-compatible server on `localhost` |
 | **3. Restore** | Puts real values back into AI replies | Automatic on supported sites, or by hand in the popup |
@@ -36,47 +36,74 @@ Measured with `npm run eval` on 25 hand-written samples (support tickets, HR, me
 
 The sample set was also used to tune the extension, so expect real-world numbers to be somewhat lower. Single first names on their own ("Carlos") are the most common miss.
 
+A second, larger test (`npm run stress`) generates 3,498 cases for users across the Middle East and North Africa: 14 countries' phone numbers, IDs and IBANs, regional names in every casing (Title, lower, UPPER, mIxEd), 17 places in the text (tables, CSV, JSON, signatures, long pastes) and copy-paste traps (zero-width spaces, right-to-left marks, Arabic-Indic digits). Its leak check is strict: one surname or any 4 digits left behind counts as a leak. Current result (2026-11-08): 3,501 cases, 3,309 pass, 4 fail, no ordinary sentence hidden by mistake. Phones, IDs, IBANs, cards, dates of birth, emails, keys, IPs, Western addresses and organizations: no leaks. Names: 1,260 of 1,262 caught. Also checked live on ChatGPT, Claude.ai and Gemini with real keyboard pastes: no leaks. Not covered yet: names written in Arabic script, regional addresses ("Building 5, Street 9, Maadi").
+
 ## Install
 
-Works in Chrome, Edge and Brave version 128 or newer. You need Node.js 20 or newer for the one-time setup.
+Works on **Windows, macOS and Linux** in Chrome, Edge and Brave version 128 or newer. Every change is tested on Windows and macOS by GitHub Actions.
+
+### From the release zip (no setup)
+
+1. Unzip `local-ai-anonymizer-<version>.zip`.
+2. Open `chrome://extensions` (or `edge://extensions`, `brave://extensions`).
+3. Turn on **Developer mode**.
+4. Click **Load unpacked** and pick the unzipped folder.
+5. Open the extension's **Settings** and press **Test detection**. It should answer in well under a second.
+
+### From source
+
+You need [Node.js](https://nodejs.org) 22 or newer.
 
 ```bash
 npm install
 ```
 
-`npm install` also runs `npm run vendor`, which copies the model runtime into `vendor/` and downloads the model (about 90 MB in total) so the extension works fully offline afterwards.
+`npm install` also runs `npm run vendor`, which copies the model runtime into `vendor/` and downloads the model (about 90 MB in total) so the extension works fully offline afterwards. Then load this folder with **Load unpacked** as above.
 
-Then load it:
-
-1. Open `chrome://extensions` (or `edge://extensions`, `brave://extensions`).
-2. Turn on **Developer mode**.
-3. Click **Load unpacked** and pick this folder.
-4. Open the extension's **Settings** and press **Test detection**. It should answer in well under a second.
-
-To share it with others, build a self-contained zip (about 56 MB) that they can unzip and load the same way:
+To share it with others, build the zip (about 57 MB):
 
 ```bash
 npm run package
 ```
 
-The zip lands in `dist/` and contains only the manifest, icons, source and the bundled model.
+The zip lands in `dist/` and contains only the manifest, icons, source and the bundled model. It is byte-identical for the same sources on any platform.
+
+### Keyboard shortcut
+
+`Alt+Shift+A` on Windows and Linux, `Option+Shift+A` on a Mac. Change it at `chrome://extensions/shortcuts` (or `edge://extensions/shortcuts`).
 
 ### Optional: Ollama
 
-The built-in model handles names, companies and places. For a larger model that also understands addresses and case numbers written in free text:
+The built-in model handles names, companies and places. For a larger model that also understands addresses and case numbers written in free text, install Ollama and download a model.
+
+**macOS:**
 
 ```bash
 brew install ollama
 ```
 
+**Windows:** run the installer from [ollama.com/download](https://ollama.com/download).
+
+Then, on either:
+
 ```bash
 ollama pull llama3.2
 ```
 
-Then pick **Ollama** as the engine in Settings. LM Studio, llama.cpp server and vLLM work too via **OpenAI-compatible**. If the test reports HTTP 403, start Ollama with:
+Pick **Ollama** as the engine in Settings. LM Studio, llama.cpp server and vLLM work too via **OpenAI-compatible**.
+
+If the test reports HTTP 403, Ollama is refusing the extension. Allow it, then restart Ollama.
+
+**macOS:**
 
 ```bash
-OLLAMA_ORIGINS="chrome-extension://*" ollama serve
+launchctl setenv OLLAMA_ORIGINS "chrome-extension://*"
+```
+
+**Windows (PowerShell):**
+
+```powershell
+setx OLLAMA_ORIGINS "chrome-extension://*"
 ```
 
 ## Using it
@@ -87,6 +114,7 @@ OLLAMA_ORIGINS="chrome-extension://*" ollama serve
   - sites that accept a paste anywhere on the page and route it into their message box.
 
   Password, number and date fields are left alone. Moving text around inside the message box is not intercepted.
+- **Type and send:** when you press Enter (or Ctrl/Cmd+Enter) or click a Send button, a typed message is checked first. If it holds sensitive data, the send waits, the message box is anonymized, then the send goes ahead. A background check after each pause in typing lets clean messages go through instantly as the real keystroke. Shift+Enter (new line) is never held. If the check fails, nothing is sent and the panel offers **Send anyway**. Turn it off in Settings ("Check typed text before it is sent").
 - **Attach files:** files you pick, drag or paste into a protected AI site are cleaned before the site receives them:
   - text and code files, CSV and JSON;
   - Word (`.docx`), Excel (`.xlsx`) and PowerPoint (`.pptx`), with formatting kept and author names removed.
@@ -121,7 +149,7 @@ Real keyboard pastes (logged out, nothing sent) leave no sensitive value in the 
 
 Limits: automatic detection is a safety net, not a guarantee.
 - The built-in model is English-only and misses some names, especially single first names.
-- Typing sensitive data by hand is not checked; only paste, drag-and-drop, file uploads and the `Alt+Shift+A` shortcut are. Use the shortcut after typing.
+- Typed text is checked on Enter, Ctrl/Cmd+Enter, a Send/Submit button or a form submit. A site that sends some other way (an unlabelled icon button outside a form, a send on mouse-down) is not covered; press `Alt+Shift+A` first there.
 - Text inside PDFs and images is not read. Those files are held so you can decide, not cleaned.
 - Uploads made through the browser's newer file-picker API (rather than a regular file button) are not intercepted.
 - Inside Office files, the following are cleaned: text, tables, headers and footers, comments, tracked deletions, field codes, link targets, slide notes, pivot-table caches and author metadata. The preview thumbnail is replaced with a blank image. Not checked (the panel lists whatever applies): images, charts, embedded files, custom XML data, Excel table column names, sheet names and formulas, and numbers stored as numbers.
