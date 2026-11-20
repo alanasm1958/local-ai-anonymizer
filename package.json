@@ -1,6 +1,6 @@
 {
   "name": "ae-extension-local-anonymizer",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Browser extension that anonymizes sensitive text with a local model before it reaches AI tools",
   "private": true,
   "type": "module",

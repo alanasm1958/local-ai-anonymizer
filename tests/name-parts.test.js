@@ -149,3 +149,22 @@ test('regional titles never become or join a name (found live: "Eng.")', () => {
   assert.deepEqual(align('Contact Eng. Samir', [tok('Contact', 'O'), tok('En', 'O'), tok('##g', 'O'), tok('.', 'O'), tok('Sami', 'B-PER'), tok('##r', 'B-PER')]),
     [['Samir', 'PERSON']]);
 });
+
+// Found while rebuilding store images: "Rashid at Gulf" read as an "at-" particle
+// surname, so the person swallowed "Gulf" and "Petro Services" was sent as typed.
+test('English words that double as particles (at, as) never join across a space', () => {
+  const text = 'reply to Ahmed Rashid at Gulf Petro Services today';
+  const tokens = [tok('reply', 'O'), tok('to', 'O'), tok('Ahmed', 'B-PER', 1), tok('Rashid', 'I-PER', 0.97), tok('at', 'O'),
+    tok('Gulf', 'B-ORG', 1), tok('Pet', 'I-ORG', 1), tok('##ro', 'I-ORG', 1), tok('Services', 'I-ORG', 1), tok('today', 'O')];
+  assert.deepEqual(align(text, tokens), [['Ahmed Rashid', 'PERSON'], ['Gulf Petro Services', 'ORGANIZATION']]);
+
+  const role = 'signed by Omar Haddad as Director';
+  const roleTokens = [tok('signed', 'O'), tok('by', 'O'), tok('Omar', 'B-PER', 1), tok('Haddad', 'I-PER', 1), tok('as', 'O'), tok('Director', 'O')];
+  assert.deepEqual(align(role, roleTokens), [['Omar Haddad', 'PERSON']]);
+});
+
+test('the same particles still join with a hyphen ("at-Tahir")', () => {
+  const text = 'Hassan at-Tahir';
+  const tokens = [tok('Hassan', 'B-PER', 0.9), tok('at', 'O'), tok('-', 'O'), tok('Tahir', 'O', 0.5)];
+  assert.deepEqual(align(text, tokens), [['Hassan at-Tahir', 'PERSON']]);
+});

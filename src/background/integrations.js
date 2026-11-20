@@ -79,7 +79,7 @@ async function applyCustomSites(settings) {
 
 export async function updateBadge(vault) {
   const size = vaultSize(vault);
-  await chrome.action.setBadgeBackgroundColor({ color: '#0f766e' });
+  await chrome.action.setBadgeBackgroundColor({ color: '#283a97' });
   await chrome.action.setBadgeText({ text: size > 0 ? String(Math.min(size, 999)) : '' });
 }
 

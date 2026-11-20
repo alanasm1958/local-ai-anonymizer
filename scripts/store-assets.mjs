@@ -153,17 +153,25 @@ async function captureOptions(context, extensionUrl) {
   return { model, types };
 }
 
+// Brand palette (same values as src/ui/theme.css) and the bundled Montserrat font.
+const BRAND = { dark: '#283a97', light: '#00a1e4', gold: '#fdc20f', text: '#1a1d33', muted: '#5b6280' };
+const FONT_FACE = `@font-face { font-family: "Montserrat"; font-weight: 100 900;
+  src: url(data:font/woff2;base64,${(await readFile(new URL('../src/ui/fonts/montserrat-latin-variable.woff2', import.meta.url))).toString('base64')}) format("woff2"); }`;
+const FONT_STACK = '"Montserrat", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
+
 const FRAME_CSS = `
+  ${FONT_FACE}
   * { box-sizing: border-box; margin: 0; }
-  body { width: 1280px; height: 800px; overflow: hidden; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-    background: radial-gradient(1200px 700px at 85% 20%, #d7f5ef 0%, #eef7f5 45%, #f6f8f7 100%); color: #0f1f1c; }
+  body { width: 1280px; height: 800px; overflow: hidden; font-family: ${FONT_STACK};
+    background: radial-gradient(1200px 700px at 85% 20%, #e0f3fc 0%, #eef1f9 45%, #f4f6fb 100%); color: ${BRAND.text}; }
   .wrap { display: grid; grid-template-columns: 400px 1fr; gap: 48px; align-items: center; height: 100%; padding: 0 64px; }
-  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: #0f766e; margin-bottom: 26px; font-size: 17px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: ${BRAND.dark}; margin-bottom: 26px; font-size: 17px; }
   .brand img { width: 30px; height: 30px; }
-  h1 { font-size: 44px; line-height: 1.12; letter-spacing: -0.02em; margin-bottom: 20px; }
-  p { font-size: 20px; line-height: 1.5; color: #43534f; }
+  h1 { font-size: 42px; line-height: 1.15; letter-spacing: -0.01em; margin-bottom: 20px; color: ${BRAND.dark}; font-weight: 800; }
+  h1::after { content: ""; display: block; width: 64px; height: 5px; border-radius: 3px; background: ${BRAND.gold}; margin-top: 18px; }
+  p { font-size: 20px; line-height: 1.5; color: ${BRAND.muted}; }
   .shot { justify-self: center; display: flex; justify-content: center; align-items: center; max-height: 680px; }
-  .shot img { display: block; max-width: 100%; max-height: 680px; border-radius: 14px; box-shadow: 0 24px 60px rgba(15, 31, 28, .18), 0 0 0 1px rgba(15, 31, 28, .06); }
+  .shot img { display: block; max-width: 100%; max-height: 680px; border-radius: 14px; box-shadow: 0 24px 60px rgba(26, 29, 51, .18), 0 0 0 1px rgba(26, 29, 51, .06); }
 `;
 
 async function composeFrame(page, { title, text, image, iconUrl, maxWidth = 740 }) {
@@ -179,13 +187,16 @@ async function composeFrame(page, { title, text, image, iconUrl, maxWidth = 740 
 async function composeTile(page, { width, height, iconUrl, title, tagline, titleSize, taglineSize, iconSize }) {
   await page.setViewportSize({ width, height });
   await page.setContent(`<!doctype html><html><head><meta charset="utf-8"><style>
+    ${FONT_FACE}
     * { margin: 0; box-sizing: border-box; }
     body { width: ${width}px; height: ${height}px; overflow: hidden; display: flex; align-items: center; gap: ${Math.round(iconSize * 0.3)}px;
-      padding: 0 ${Math.round(width * 0.08)}px; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-      background: linear-gradient(135deg, #0b3b37 0%, #0f766e 60%, #14b8a6 100%); color: #fff; }
-    img { width: ${iconSize}px; height: ${iconSize}px; filter: drop-shadow(0 8px 18px rgba(0,0,0,.25)); flex: none; }
-    h1 { font-size: ${titleSize}px; line-height: 1.1; letter-spacing: -0.01em; }
-    p { font-size: ${taglineSize}px; line-height: 1.35; opacity: .9; margin-top: 10px; }
+      padding: 0 ${Math.round(width * 0.08)}px; font-family: ${FONT_STACK};
+      background: linear-gradient(135deg, #ffffff 0%, #eef1f9 55%, #e0f3fc 100%); color: ${BRAND.dark};
+      border-bottom: ${Math.max(4, Math.round(height * 0.02))}px solid ${BRAND.light}; }
+    img { width: ${iconSize}px; height: ${iconSize}px; filter: drop-shadow(0 8px 18px rgba(40,58,151,.25)); flex: none; }
+    h1 { font-size: ${titleSize}px; line-height: 1.1; letter-spacing: -0.01em; font-weight: 800; }
+    h1::after { content: ""; display: block; width: 18%; height: ${Math.max(3, Math.round(titleSize * 0.09))}px; border-radius: 3px; background: ${BRAND.gold}; margin-top: ${Math.round(titleSize * 0.3)}px; }
+    p { font-size: ${taglineSize}px; line-height: 1.35; color: ${BRAND.muted}; margin-top: 10px; }
   </style></head><body><img src="${iconUrl}" alt=""><div><h1>${title}</h1><p>${tagline}</p></div></body></html>`);
   await page.waitForTimeout(150);
   return page.screenshot({ type: 'png', scale: 'css' });

@@ -1,40 +1,57 @@
+/* Palette: organization brand colors (May 2021 color guide, digital RGB values).
+   Two primary blues plus one secondary color (gold), as the guide asks.
+   Green and red stay only as status colors (ok / error). */
+@font-face {
+  font-family: "Montserrat";
+  src: url("fonts/montserrat-latin-variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
-  --bg: #f6f8f7;
+  --brand-dark: #283a97;   /* primary dark blue */
+  --brand-light: #00a1e4;  /* primary light blue */
+  --brand-gold: #fdc20f;   /* secondary accent */
+  --bg: #f4f6fb;
   --surface: #ffffff;
-  --surface-2: #eef3f1;
-  --text: #0f1f1c;
-  --muted: #5b6b67;
-  --border: #dbe3e0;
-  --accent: #0f766e;
-  --accent-strong: #0b5c56;
-  --accent-soft: #ccfbf1;
+  --surface-2: #eef1f9;
+  --text: #1a1d33;
+  --muted: #5b6280;
+  --border: #dce1ef;
+  --accent: var(--brand-dark);
+  --accent-strong: #1f2e7a;
+  --accent-soft: #e0f3fc;
+  --accent-2: var(--brand-light);
   --on-accent: #ffffff;
-  --warn: #b45309;
-  --warn-soft: #fef3c7;
+  --warn: #8a5a00;
+  --warn-soft: #fff4d6;
   --danger: #b91c1c;
   --danger-soft: #fee2e2;
   --ok: #15803d;
   --radius: 10px;
+  --font: "Montserrat", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0c1413;
-    --surface: #121d1b;
-    --surface-2: #182624;
-    --text: #e4efec;
-    --muted: #92a6a1;
-    --border: #253632;
-    --accent: #2dd4bf;
-    --accent-strong: #5eead4;
-    --accent-soft: #134e48;
-    --on-accent: #04201c;
-    --warn: #fbbf24;
-    --warn-soft: #3b2a06;
-    --danger: #f87171;
-    --danger-soft: #3b1212;
+    --bg: #0b1030;
+    --surface: #121a42;
+    --surface-2: #19234f;
+    --text: #e9ecf8;
+    --muted: #9ea7cc;
+    --border: #283466;
+    --accent: var(--brand-light);
+    --accent-strong: #4fc0ee;
+    --accent-soft: #0e2f57;
+    --accent-2: var(--brand-light);
+    --on-accent: #071033;
+    --warn: var(--brand-gold);
+    --warn-soft: #3a2e05;
+    --danger: #ff8a7a;
+    --danger-soft: #3b1717;
     --ok: #4ade80;
     color-scheme: dark;
   }
@@ -49,10 +66,11 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font: 13px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font: 13px/1.5 var(--font);
 }
 
-h1, h2, h3 { margin: 0; line-height: 1.25; }
+h1, h2, h3 { margin: 0; line-height: 1.25; font-weight: 700; color: var(--accent); }
+@media (prefers-color-scheme: dark) { h1, h2, h3 { color: var(--text); } }
 
 a { color: var(--accent); }
 
@@ -98,7 +116,7 @@ textarea, input[type="text"], input[type="url"], input[type="number"], select {
 }
 textarea { resize: vertical; min-height: 84px; font-family: var(--mono); font-size: 12px; }
 textarea:focus, input:focus, select:focus, button:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--accent-2);
   outline-offset: 1px;
 }
 
@@ -138,7 +156,7 @@ textarea:focus, input:focus, select:focus, button:focus-visible {
 }
 
 .notice { padding: 9px 11px; border-radius: 8px; font-size: 12px; }
-.notice.warn { background: var(--warn-soft); color: var(--warn); }
+.notice.warn { background: var(--warn-soft); color: var(--warn); border-left: 3px solid var(--brand-gold); }
 .notice.error { background: var(--danger-soft); color: var(--danger); }
 .notice.info { background: var(--surface-2); color: var(--muted); }
 

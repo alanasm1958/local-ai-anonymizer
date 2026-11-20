@@ -50,7 +50,7 @@ npm install
 npm run package
 ```
 
-This produces `dist/local-ai-anonymizer-0.5.1.zip` (about 56 MB). For every later update, raise `version` in **both** `manifest.json` and `package.json` (the package script refuses mismatched versions), then rebuild.
+This produces `dist/local-ai-anonymizer-0.5.2.zip` (about 56 MB). For every later update, raise `version` in **both** `manifest.json` and `package.json` (the package script refuses mismatched versions), then rebuild.
 
 ## 5. Fill in the dashboard
 

@@ -13,7 +13,9 @@
 // - Particles: "el-Sayed", "Abu Hammad", "Ben Salah", "Abdel Aziz" join the
 //   name together with the word after them.
 
-const PARTICLE = /^[ \t](?:al|el|abu|abou|ben|bin|ibn|bint|abd|abdel|abdul|abi|ould|ait|bou|ul|ed|ad|as|ash|at|az)(?:[ -]|(?=-))/i;
+// Particles that are also everyday English words (at, as, ad, ed) join only with
+// a hyphen ("at-Tahir"): "Rashid at Gulf Petro" is a person, then a company.
+const PARTICLE = /^[ \t](?:(?:al|el|abu|abou|ben|bin|ibn|bint|abd|abdel|abdul|abi|ould|ait|bou|ul|ash|az)(?:[ -]|(?=-))|(?:ed|ad|as|at)-)/i;
 const NAME_WORD = /^-?[\p{L}][\p{L}'’]*(?:-[\p{L}][\p{L}'’]*)?/u;
 const CAPITAL_WORD = /^(,?)[ \t](\p{Lu}[\p{L}'’]*(?:-[\p{L}][\p{L}'’]*)?)(?![\p{L}\p{N}@])/u;
 const CAPITAL_WORD_BEFORE = /(?<![\p{L}\p{N}@.])(\p{Lu}[\p{L}'’]*(?:-[\p{L}][\p{L}'’]*)?)(,?)[ \t]$/u;
