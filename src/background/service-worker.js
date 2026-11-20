@@ -3,7 +3,7 @@
 import { anonymize, restoreText, placeholderSpans } from '../core/anonymizer.js';
 import { createModelClient } from '../core/llm.js';
 import { isSiteEnabled, enabledTypes, normalizeHost } from '../core/settings.js';
-import { vaultEntries, lookupForSite, isRevealable, ANY_SITE } from '../core/vault.js';
+import { vaultEntries, lookupForSite, isRevealable, originalsForCopy, ANY_SITE } from '../core/vault.js';
 import {
   getSettings, saveSettings, getVault, setVault, clearVault, withVaultLock, keepAlive, getStats, setStats,
 } from './state.js';
@@ -187,6 +187,7 @@ async function handleSiteStatus({ hostname }) {
     interceptPaste: settings.interceptPaste,
     checkTyping: settings.checkTyping,
     restoreReplies: settings.restoreReplies,
+    restoreOnCopy: settings.restoreOnCopy,
     checkFiles: settings.checkFiles,
     holdUncheckedFiles: settings.holdUncheckedFiles,
   };
@@ -208,6 +209,12 @@ async function handleLookup({ placeholders }, sender) {
       .map((p) => [p, lookupForSite(vault, p, site)])
       .filter(([, original]) => original !== undefined),
   );
+}
+
+// Placeholders in a copied reply, originals out, for the user's clipboard
+// (copy-restore.js). Every type, but only values pasted on this site.
+async function handleCopyOriginals({ placeholders }, sender) {
+  return originalsForCopy(await getVault(), placeholders, siteOf(sender));
 }
 
 // Pages showing restored values put placeholders back.
@@ -238,6 +245,7 @@ const CONTENT_HANDLERS = Object.freeze({
   restore: handleRestore,
   siteStatus: handleSiteStatus,
   lookup: handleLookup,
+  copyOriginals: handleCopyOriginals,
   anonymizeFile: handleAnonymizeFile,
 });
 

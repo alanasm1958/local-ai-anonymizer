@@ -55,6 +55,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   interceptPaste: true,
   checkTyping: true,
   restoreReplies: true,
+  // Ctrl/Cmd+C on an AI reply puts the real details on the clipboard.
+  restoreOnCopy: true,
   checkFiles: true,
   holdUncheckedFiles: true,
   useModel: true,
@@ -120,6 +122,7 @@ export function mergeSettings(stored) {
     interceptPaste: pickBool(s.interceptPaste, DEFAULT_SETTINGS.interceptPaste),
     checkTyping: pickBool(s.checkTyping, DEFAULT_SETTINGS.checkTyping),
     restoreReplies: pickBool(s.restoreReplies, DEFAULT_SETTINGS.restoreReplies),
+    restoreOnCopy: pickBool(s.restoreOnCopy, DEFAULT_SETTINGS.restoreOnCopy),
     checkFiles: pickBool(s.checkFiles, DEFAULT_SETTINGS.checkFiles),
     holdUncheckedFiles: pickBool(s.holdUncheckedFiles, DEFAULT_SETTINGS.holdUncheckedFiles),
     useModel: pickBool(s.useModel, DEFAULT_SETTINGS.useModel),

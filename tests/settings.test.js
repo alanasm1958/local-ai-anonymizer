@@ -80,3 +80,10 @@ test('file checking and holding default on and can be turned off', () => {
   assert.equal(merged.checkFiles, false);
   assert.equal(merged.holdUncheckedFiles, true);
 });
+
+test('copying a reply fills in real details by default, and can be turned off', () => {
+  assert.equal(DEFAULT_SETTINGS.restoreOnCopy, true);
+  assert.equal(mergeSettings({}).restoreOnCopy, true);
+  assert.equal(mergeSettings({ restoreOnCopy: false }).restoreOnCopy, false);
+  assert.equal(mergeSettings({ restoreOnCopy: 'yes' }).restoreOnCopy, true);
+});

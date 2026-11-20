@@ -87,6 +87,22 @@ export function assignPlaceholder(vault, type, value) {
   return { vault: next, placeholder: placeholders[0] };
 }
 
+// For copying a reply to the user's own clipboard: every type (cards and IDs
+// included, unlike isRevealable), but only values pasted on this site, and at
+// most MAX_COPY_LOOKUP per copy so a page full of placeholders can't dump the vault.
+export const MAX_COPY_LOOKUP = 500;
+
+export function originalsForCopy(vault, placeholders, site) {
+  if (!Array.isArray(placeholders)) return {};
+  return Object.fromEntries(
+    placeholders
+      .filter((p) => typeof p === 'string')
+      .slice(0, MAX_COPY_LOOKUP)
+      .map((p) => [p, lookupForSite(vault, p, site)])
+      .filter(([, original]) => original !== undefined),
+  );
+}
+
 export const lookupPlaceholder = (vault, placeholder) => vault.byPlaceholder[placeholder];
 
 export const vaultSize = (vault) => Object.keys(vault.byPlaceholder).length;

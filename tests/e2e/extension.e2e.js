@@ -519,6 +519,87 @@ test('reply reveal: user sees real values, the page DOM keeps placeholders', asy
   await page.close();
 });
 
+// Selects the reply and presses the real copy shortcut. The page listens for
+// copy everywhere it can and records anything it gets to see.
+async function copyReply(page) {
+  await page.evaluate(() => {
+    window.pageCopyEvents = [];
+    const spy = (where) => (e) => window.pageCopyEvents.push({ where, data: e.clipboardData?.getData('text/plain') ?? '' });
+    window.addEventListener('copy', spy('window-capture'), true);
+    window.addEventListener('copy', spy('window'));
+    document.addEventListener('copy', spy('document'));
+    document.getElementById('reply').addEventListener('copy', spy('reply'));
+    const range = document.createRange();
+    range.selectNodeContents(document.getElementById('reply'));
+    getSelection().removeAllRanges();
+    getSelection().addRange(range);
+  });
+  await page.keyboard.press('ControlOrMeta+c');
+  await page.waitForTimeout(600);
+}
+
+const clipboardText = (page) => page.evaluate(() => navigator.clipboard.readText());
+
+test('copying a reply puts the real details on the clipboard; the page never sees the copy', async () => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'https://chatgpt.com' });
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'https://claude.ai' });
+  const chat = await openChat();
+  await chat.evaluate((t) => window.firePaste('plain', t), SECRET_TEXT);
+  await chat.waitForFunction(() => /\[CREDIT_CARD_\d+\]/.test(document.getElementById('plain').value), null, { timeout: 30000 });
+  const sent = await chat.inputValue('#plain');
+  await chat.close();
+
+  const reply = await openChat();
+  await reply.evaluate((t) => window.showReply(`Draft: write to ${t} <b>soon</b> & thanks`), sent);
+  await copyReply(reply);
+  const copied = await clipboardText(reply);
+  for (const real of ['Maria Gonzalez', 'Northwind Traders', 'maria@northwind.example', '4111 1111 1111 1111']) {
+    assert.ok(copied.includes(real), `clipboard is missing "${real}": ${copied}`);
+  }
+  assert.doesNotMatch(copied, /\[(PERSON|ORGANIZATION|EMAIL|CREDIT_CARD)_\d+\]/);
+  assert.deepEqual(await reply.evaluate(() => window.pageCopyEvents), [], 'the page saw the copy event');
+  const html = await reply.evaluate(async () => {
+    const [item] = await navigator.clipboard.read();
+    return item.types.includes('text/html') ? (await item.getType('text/html')).text() : '';
+  });
+  assert.match(html, /Maria Gonzalez/);
+  assert.match(html, /&lt;b&gt;soon&lt;\/b&gt; &amp; thanks/, 'page text stays escaped in the HTML copy');
+  // Everything the page's own scripts can read (its <script> source aside).
+  const pageReadable = await reply.evaluate(() => [...document.body.childNodes]
+    .filter((n) => n.nodeName !== 'SCRIPT')
+    .map((n) => n.outerHTML ?? n.textContent).join('') + document.body.innerText);
+  assert.equal(pageReadable.includes('Maria Gonzalez'), false);
+
+  // Copying from the composer is the user's own draft: the browser copies it as is.
+  await reply.evaluate((t) => { document.getElementById('plain').value = t; }, sent);
+  await reply.focus('#plain');
+  await reply.evaluate(() => document.getElementById('plain').select());
+  await reply.keyboard.press('ControlOrMeta+c');
+  await reply.waitForTimeout(400);
+  assert.equal(await clipboardText(reply), sent);
+
+  // Setting off: an ordinary copy, placeholders included.
+  await patchSettings({ restoreOnCopy: false });
+  await reply.waitForTimeout(300);
+  await copyReply(reply);
+  assert.match(await clipboardText(reply), /\[CREDIT_CARD_\d+\]/, 'secrets are never on screen, so a plain copy keeps the label');
+  assert.ok((await reply.evaluate(() => window.pageCopyEvents.length)) > 0);
+  // The page's own scripts reading the selection get placeholders only.
+  const pageSelection = await reply.evaluate(() => getSelection().toString());
+  assert.equal(pageSelection.includes('Maria Gonzalez'), false, `page read the revealed name: ${pageSelection}`);
+  await patchSettings({ restoreOnCopy: true });
+  await reply.close();
+
+  // Another AI site gets no values that were pasted on chatgpt.com.
+  const other = await openChat('https://claude.ai/');
+  await other.evaluate((t) => window.showReply(t), sent);
+  await copyReply(other);
+  const elsewhere = await clipboardText(other);
+  // (Earlier tests may have pasted the name itself on claude.ai; these never were.)
+  assert.doesNotMatch(elsewhere, /Northwind|maria@northwind|4111/);
+  await other.close();
+});
+
 test('reply reveal is limited to the site the value was pasted on, and skips secrets', async () => {
   const chat = await openChat();
   await chat.evaluate((t) => window.firePaste('plain', t), SECRET_TEXT);

@@ -61,7 +61,8 @@ PRIVACY BY DESIGN
 • No data leaves your device. The extension has no server, no analytics and no tracking.
 • The list of placeholders and their real values is kept in memory only and is erased when you close the browser, or sooner with one click.
 • Revealed names in replies are kept out of the page's own text, so the AI website's scripts still see only the placeholders.
-• Card numbers, account numbers and other secrets are never put back into the AI's replies on screen. Restore them from the extension's popup when you need them.
+• Card numbers, account numbers and other secrets are never put back into the AI's replies on screen.
+• Copy part of a reply with Ctrl/Cmd+C and the copy has the real details, ready for your email or document. They go to your clipboard only; the website never sees the copy.
 
 OPTIONAL: A STRONGER MODEL
 If you already run Ollama or LM Studio on your computer, you can switch the detection engine to it in Settings for broader coverage. By default it talks only to your own computer.

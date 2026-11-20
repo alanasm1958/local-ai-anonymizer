@@ -13,7 +13,7 @@
   // Fail closed: protection is on from the first moment, before the worker
   // has confirmed this site's settings.
   const PROTECTED = Object.freeze({ active: true, interceptPaste: true, checkTyping: true, checkFiles: true, holdUncheckedFiles: true });
-  const state = { ...PROTECTED, restoreReplies: false };
+  const state = { ...PROTECTED, restoreReplies: false, restoreOnCopy: false };
   let dispatchingSynthetic = false;
 
   // toast.js, reveal.js and uploads.js are injected first into the same isolated world.
@@ -64,6 +64,7 @@
       state.interceptPaste = status.interceptPaste;
       state.checkTyping = status.checkTyping;
       state.restoreReplies = status.restoreReplies;
+      state.restoreOnCopy = status.restoreOnCopy;
       state.checkFiles = status.checkFiles;
       state.holdUncheckedFiles = status.holdUncheckedFiles;
     } catch {
@@ -409,6 +410,7 @@
   globalThis.__anonymizerSendGuard?.createSendGuard({
     send, ui, settings: () => state, editableRoot, isTextControl, selectAll, selectedText, insertText, describeResult,
   }).watch();
+  globalThis.__anonymizerCopyRestore?.createCopyRestorer({ send, ui, settings: () => state, editableRoot }).watch();
   window.addEventListener('paste', onPaste, true);
   window.addEventListener('drop', onDrop, true);
   window.addEventListener('dragstart', onDragStart, true);

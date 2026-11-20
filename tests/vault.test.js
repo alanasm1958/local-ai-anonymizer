@@ -81,3 +81,26 @@ test('isRevealable allows names and contact details but not secrets', () => {
   for (const p of ['[PERSON_1]', '[ORGANIZATION_2]', '[LOCATION_1]', '[EMAIL_1]', '[PHONE_3]', '[ADDRESS_1]']) assert.equal(isRevealable(p), true, p);
   for (const p of ['[CREDIT_CARD_1]', '[SSN_1]', '[IBAN_1]', '[API_KEY_1]', '[ID_NUMBER_1]', '[DATE_OF_BIRTH_1]', '[IP_ADDRESS_1]']) assert.equal(isRevealable(p), false, p);
 });
+
+// Copying a reply fills in every type (cards and IDs too: they go to the
+// user's own clipboard, never into the page), but only values pasted on
+// the site the copy happens on.
+test('originalsForCopy returns this site\'s values of every type, nothing else', async () => {
+  const { originalsForCopy } = await import('../src/core/vault.js');
+  const { vault: v1 } = assignPlaceholders(createVault(), [
+    { type: 'PERSON', value: 'Ana' }, { type: 'CREDIT_CARD', value: '4111 1111 1111 1111' },
+  ], { site: 'chatgpt.com' });
+  const { vault } = assignPlaceholders(v1, [{ type: 'EMAIL', value: 'b@x.io' }], { site: 'claude.ai' });
+  const asked = ['[PERSON_1]', '[CREDIT_CARD_1]', '[EMAIL_1]', '[PERSON_9]', 'not a placeholder', 42];
+  assert.deepEqual(originalsForCopy(vault, asked, 'chatgpt.com'), { '[PERSON_1]': 'Ana', '[CREDIT_CARD_1]': '4111 1111 1111 1111' });
+  assert.deepEqual(originalsForCopy(vault, asked, 'claude.ai'), { '[EMAIL_1]': 'b@x.io' });
+  assert.deepEqual(originalsForCopy(vault, 'nope', 'chatgpt.com'), {});
+});
+
+test('originalsForCopy caps how many placeholders one copy can ask for', async () => {
+  const { originalsForCopy, MAX_COPY_LOOKUP } = await import('../src/core/vault.js');
+  const items = Array.from({ length: MAX_COPY_LOOKUP + 5 }, (_, i) => ({ type: 'PERSON', value: `P${i}` }));
+  const { vault } = assignPlaceholders(createVault(), items, { site: 'chatgpt.com' });
+  const asked = Object.keys(vault.byPlaceholder);
+  assert.equal(Object.keys(originalsForCopy(vault, asked, 'chatgpt.com')).length, MAX_COPY_LOOKUP);
+});

@@ -45,12 +45,13 @@
         <li><strong>No outbound network traffic.</strong> The model loads from the extension's own files (remote model loading is switched off in code). There is no telemetry, analytics or account.</li>
         <li><strong>No remote code.</strong> Manifest V3; all code ships in the package.</li>
         <li><strong>No model downloads.</strong> Only the model shipped in the package can run; downloading models from the internet is switched off in code, so changing the model requires a new version reviewed by IT.</li>
+        <li><strong>Copying replies:</strong> when a user copies AI reply text with Ctrl/Cmd+C, the real values for that site go to their clipboard only. The extension stops the copy event before the page's scripts see it (setting: "Copying an AI reply includes the real details", on by default).</li>
         <li><strong>Storage:</strong> settings in <code>storage.local</code>; the placeholder-to-value map in <code>storage.session</code> only (memory, cleared when the browser closes).</li>
         <li><strong>Runs on:</strong> chatgpt.com, claude.ai, gemini.google.com, copilot.microsoft.com, perplexity.ai, chat.deepseek.com, chat.mistral.ai, grok.com, poe.com. Users can add other sites, which asks for permission per site.</li>
         <li><strong>Permissions:</strong> <code>storage</code>, <code>contextMenus</code>, <code>scripting</code>, <code>activeTab</code>, <code>offscreen</code> (runs the model), <code>declarativeNetRequest</code> (only used for the optional local engine). Host access is limited to <code>localhost</code> / <code>127.0.0.1</code>.</li>
         <li><strong>Optional engine:</strong> a power user can switch detection to a local Ollama server on the same machine. If someone enters a server that is not on their computer, the settings page shows a warning that text will be sent there.</li>
         <li><strong>Third-party code:</strong> Transformers.js and ONNX Runtime Web (run the model), fflate (Office files), and the DistilBERT-NER model (English, 66 MB). All open source. Only <code>vendor/</code> holds these; everything in <code>src/</code> is readable source written for this tool.</li>
-        <li><strong>Testing:</strong> 272 unit tests, 91 automated browser tests with the real extension, and a 3,501-case stress test of MENA names, phones and IDs.</li>
+        <li><strong>Testing:</strong> 275 unit tests, 92 automated browser tests with the real extension, and a 3,501-case stress test of MENA names, phones and IDs.</li>
       </ul>
     </section>
 
