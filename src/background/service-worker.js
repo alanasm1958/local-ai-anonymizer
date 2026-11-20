@@ -14,6 +14,7 @@ import * as fflate from '../../vendor/fflate/fflate.js';
 import { syncOriginRule, syncCustomSites, updateBadge, ensureContentScript } from './integrations.js';
 import { builtinClient, builtinStatus, warmUpBuiltin, closeOffscreen } from './builtin.js';
 import { BUILTIN_MODEL } from '../core/ner.js';
+import { shouldShowGuide, GUIDE_PATH } from '../core/welcome.js';
 
 const MAX_TEXT_LENGTH = 200000;
 const TEST_SAMPLE = 'Hi, I am Maria Gonzalez from Northwind Traders in Leeds. Please call me back about invoice 48213.';
@@ -301,11 +302,23 @@ async function initialize() {
   await warmUpIfBuiltin(settings).catch((err) => console.error('[anonymizer] warm-up failed:', err));
 }
 
-chrome.runtime.onInstalled.addListener(() => {
+async function openGuideOnFirstInstall(reason) {
+  try {
+    const { installType } = await chrome.management.getSelf();
+    if (shouldShowGuide(reason, installType)) {
+      await chrome.tabs.create({ url: chrome.runtime.getURL(GUIDE_PATH) });
+    }
+  } catch (err) {
+    console.warn('Could not open the How to use guide:', err);
+  }
+}
+
+chrome.runtime.onInstalled.addListener(({ reason }) => {
   chrome.contextMenus.removeAll(() => {
     MENU_ITEMS.forEach((item) => chrome.contextMenus.create({ ...item, contexts: ['selection'] }));
   });
   initialize();
+  openGuideOnFirstInstall(reason);
 });
 
 chrome.runtime.onStartup.addListener(initialize);

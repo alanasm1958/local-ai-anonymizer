@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Local AI Anonymizer",
   "short_name": "Anonymizer",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Replaces names, emails, card numbers, keys and other sensitive data with placeholders before you paste into AI tools. Detection runs on a local model.",
   "minimum_chrome_version": "128",
   "icons": {

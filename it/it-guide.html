@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Local AI Anonymizer: IT install guide</title>
+  <link rel="stylesheet" href="../src/ui/theme.css">
+  <link rel="stylesheet" href="../src/help/help.css">
+  <style>
+    :root { color-scheme: light; }
+    pre { font-family: var(--mono); font-size: 12px; background: var(--surface-2); padding: 10px 12px; border-radius: 8px; white-space: pre-wrap; margin: 0; }
+    table { border-collapse: collapse; width: 100%; font-size: 13px; }
+    td:first-child code { white-space: nowrap; }
+    td, th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="hero">
+      <img src="../icons/icon-48.png" alt="" width="40" height="40">
+      <div>
+        <h1>Local AI Anonymizer: IT install guide</h1>
+        <p class="muted">Version {{VERSION}} &middot; Chrome and Edge (version 128 or later) &middot; Windows and macOS &middot; Developed by Alan Al-Jammoor</p>
+      </div>
+    </header>
+
+    <section class="card lead">
+      <h2>What it is</h2>
+      <p>A browser extension that replaces personal data (names, organizations, places, emails, phone numbers, IDs, card numbers, IBANs, keys) with placeholders such as <code>[PERSON_1]</code> before text or files reach AI chat sites. Detection runs inside the browser with a bundled model. Real values are kept in browser session memory and erased when the browser closes.</p>
+    </section>
+
+    <section class="card">
+      <h2>What is in this package</h2>
+      <table>
+        <tr><td><code>local-ai-anonymizer-{{VERSION}}.zip</code></td><td>The extension. Unzip it to get the folder Chrome or Edge loads. Includes the full source code and the AI model.</td></tr>
+        <tr><td><code>How to use (staff guide).pdf</code></td><td>One-page guide for staff. The same guide opens by itself after a policy install, and from the extension icon under <strong>How to use</strong>.</td></tr>
+        <tr><td><code>IT install guide.pdf</code></td><td>This document.</td></tr>
+      </table>
+    </section>
+
+    <section class="card">
+      <h2>Security and data facts</h2>
+      <ul>
+        <li><strong>No outbound network traffic.</strong> The model loads from the extension's own files (remote model loading is switched off in code). There is no telemetry, analytics or account.</li>
+        <li><strong>No remote code.</strong> Manifest V3; all code ships in the package.</li>
+        <li><strong>Storage:</strong> settings in <code>storage.local</code>; the placeholder-to-value map in <code>storage.session</code> only (memory, cleared when the browser closes).</li>
+        <li><strong>Runs on:</strong> chatgpt.com, claude.ai, gemini.google.com, copilot.microsoft.com, perplexity.ai, chat.deepseek.com, chat.mistral.ai, grok.com, poe.com. Users can add other sites, which asks for permission per site.</li>
+        <li><strong>Permissions:</strong> <code>storage</code>, <code>contextMenus</code>, <code>scripting</code>, <code>activeTab</code>, <code>offscreen</code> (runs the model), <code>declarativeNetRequest</code> (only used for the optional local engine). Host access is limited to <code>localhost</code> / <code>127.0.0.1</code>.</li>
+        <li><strong>Optional engine:</strong> a power user can switch detection to a local Ollama server on the same machine. If someone enters a server that is not on their computer, the settings page shows a warning that text will be sent there.</li>
+        <li><strong>Third-party code:</strong> Transformers.js and ONNX Runtime Web (run the model), fflate (Office files), and the DistilBERT-NER model (English, 66 MB). All open source. Only <code>vendor/</code> holds these; everything in <code>src/</code> is readable source written for this tool.</li>
+        <li><strong>Testing:</strong> 270 unit tests, 91 automated browser tests with the real extension, and a 3,501-case stress test of MENA names, phones and IDs.</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>Option 1: quick test on one machine</h2>
+      <ol>
+        <li>Unzip <code>local-ai-anonymizer-{{VERSION}}.zip</code> to a permanent folder.</li>
+        <li>Open <code>chrome://extensions</code> or <code>edge://extensions</code>, turn on <strong>Developer mode</strong>.</li>
+        <li>Click <strong>Load unpacked</strong> and select the folder (the one containing <code>manifest.json</code>).</li>
+      </ol>
+      <p class="muted small">Fine for a pilot. No automatic updates, and Developer mode may be blocked by your policies.</p>
+    </section>
+
+    <section class="card">
+      <h2>Option 2: deploy to managed devices (recommended)</h2>
+      <ol>
+        <li><strong>Sign it.</strong> Unzip, then run Chrome with <code>--pack-extension="&lt;folder&gt;"</code>. This creates <code>&lt;folder&gt;.crx</code> and a private key <code>&lt;folder&gt;.pem</code>. Keep the key safe: every future version must be signed with it, and it fixes the extension ID.</li>
+        <li><strong>Get the ID.</strong> Drag the <code>.crx</code> onto <code>chrome://extensions</code> on a test machine with Developer mode on; the ID is shown on the card.</li>
+        <li><strong>Host two files</strong> on an internal HTTPS location the devices can reach: the <code>.crx</code> and this <code>update.xml</code>:
+<pre>&lt;?xml version='1.0' encoding='UTF-8'?&gt;
+&lt;gupdate xmlns='http://www.google.com/update2/response' protocol='2.0'&gt;
+  &lt;app appid='EXTENSION_ID'&gt;
+    &lt;updatecheck codebase='https://YOUR-HOST/anonymizer/local-ai-anonymizer.crx' version='{{VERSION}}' /&gt;
+  &lt;/app&gt;
+&lt;/gupdate&gt;</pre></li>
+        <li><strong>Set the policy</strong> <code>ExtensionInstallForcelist</code> (same name in Chrome and Edge; in Intune Settings catalog under Google Chrome &gt; Extensions and Microsoft Edge &gt; Extensions) to:
+<pre>EXTENSION_ID;https://YOUR-HOST/anonymizer/update.xml</pre>
+          If you use an extension allowlist, add the ID to <code>ExtensionInstallAllowlist</code> too.</li>
+      </ol>
+      <p class="muted small">Browsers accept self-hosted extensions only on managed devices (domain-joined, Intune/MDM-enrolled, or Chrome Enterprise enrolled). Staff see the guide open once after install.</p>
+    </section>
+
+    <section class="card">
+      <h2>Updates</h2>
+      <p>For a new version: unzip it, pack it with the <strong>same</strong> <code>.pem</code> key (<code>--pack-extension="&lt;folder&gt;" --pack-extension-key="&lt;key&gt;.pem"</code>), replace the <code>.crx</code>, and raise <code>version</code> in <code>update.xml</code>. Browsers update within a few hours.</p>
+    </section>
+
+    <section class="card warn-card">
+      <h2>Known limits (also in the staff guide)</h2>
+      <ul>
+        <li>Detection catches most personal data, not all. Staff should still glance at text before sending.</li>
+        <li>Names written in Arabic script are not detected yet (Arabic labels for phones and IDs are).</li>
+        <li>Uploads of PDFs and images are held, not cleaned; the user decides.</li>
+      </ul>
+    </section>
+
+  </main>
+</body>
+</html>

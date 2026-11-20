@@ -1,0 +1,35 @@
+body { background: var(--bg); color: var(--text); }
+
+.page { max-width: 720px; margin: 0 auto; padding: 32px 16px 64px; display: grid; gap: 16px; }
+
+.hero { display: flex; gap: 14px; align-items: center; }
+.hero h1 { font-size: 22px; margin: 0; }
+.hero p { margin: 2px 0 0; }
+
+.card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  padding: 18px 20px; display: grid; gap: 10px;
+}
+.card h2 { font-size: 16px; margin: 0; }
+.card p { margin: 0; line-height: 1.55; }
+.card ul, .card ol { margin: 0; padding-left: 20px; display: grid; gap: 8px; line-height: 1.55; }
+
+.lead { border-color: var(--accent); }
+
+.checks { list-style: none; padding-left: 0; }
+.checks li::before { content: "\2713"; color: var(--ok); font-weight: 700; margin-right: 8px; }
+
+.warn-card { background: var(--warn-soft); border-color: var(--warn); }
+
+code {
+  font-family: var(--mono); font-size: 13px; padding: 1px 5px;
+  border-radius: 5px; background: var(--surface-2);
+}
+.small { font-size: 13px; }
+footer { text-align: center; }
+
+@media print {
+  body { background: #fff; }
+  .page { padding: 0; }
+  .card { break-inside: avoid; }
+}

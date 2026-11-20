@@ -1,6 +1,7 @@
 import { call, $, h, copyText, withBusy } from '../ui/api.js';
 import { DEFAULT_SITES, isSiteEnabled, normalizeHost } from '../core/settings.js';
 import { describeCount } from '../core/report.js';
+import { GUIDE_PATH } from '../core/welcome.js';
 
 let settings = null;
 
@@ -216,6 +217,10 @@ async function init() {
   $('#restore-copy').addEventListener('click', (e) => copyText(e.target, $('#restore-output').value));
   $('#vault-clear').addEventListener('click', clearVault);
   $('#open-options').addEventListener('click', openOptions);
+  $('#open-help').addEventListener('click', (e) => {
+    e.preventDefault();
+    chrome.tabs.create({ url: chrome.runtime.getURL(GUIDE_PATH) });
+  });
   // A popup closes when a file picker opens, so files get their own page.
   document.querySelectorAll('.file-link').forEach((link) => link.addEventListener('click', (e) => {
     e.preventDefault();

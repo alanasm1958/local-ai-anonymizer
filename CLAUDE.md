@@ -19,6 +19,8 @@ The user chose the smaller English-only model over a multilingual one (2026-10-2
 | `src/core/orgs.js` | Rule-based organizations ("X Traders", "Y Ltd") for when the model misses one at a sentence start; follows the model switch and ORGANIZATION type. |
 | `src/content/send-guard.js` | Clean on send, loaded before content.js (`globalThis.__anonymizerSendGuard`). Holds a trusted Enter/Ctrl+Enter, Send-labelled or submit button click, or form submit when the typed text is not known safe; anonymizes the box, then replays (synthetic Enter, `button.click()`, `requestSubmit`). A replayed Enter the site ignores gets the key's default (newline or form submit). Background `scan` (worker, read-only, no vault writes) after 500 ms idle marks clean text so it passes as the real event. Setting `checkTyping`. |
 | `src/content/uploads.js` | Upload guard: file inputs (stops input/change, clears the input, re-fires with cleaned files), file paste/drop; holds unsupported files. Messages carry the MIME type as `mime` because `type` is the handler name. |
+| `src/help/` + `src/core/welcome.js` | "How to use" guide for non-technical staff. Linked first in the popup footer; opens by itself on a fresh install only when `installType` is `admin` (IT policy) or `normal` (store), never for unpacked copies (keeps e2e tabs clean). |
+| `it/` + `scripts/it-bundle.mjs` | Handoff to Amideast IT: install guide (HTML rendered to PDF), email draft. `npm run it-bundle` (after `npm run package`) writes `dist/Amideast IT package <version>/` and `dist/Amideast-IT-package-<version>.zip`. |
 | `src/files/` | Clean or restore files by hand (a page, because popups close when a file picker opens). |
 | `tests/fixtures/` | Real .docx/.xlsx/.pptx from python-docx, openpyxl, python-pptx, LibreOffice and textutil (`make-fixtures.py`). |
 | `src/core/report.js` | Per-run summary by type (`summarizeReplacements`, `formatBreakdown`) and the session tally (`sessionTally`). The worker attaches `summary` to every anonymize result and keeps run/mention counts in `storage.session` (`stats`), cleared with the vault. |
@@ -100,6 +102,7 @@ npm run stress      # MENA stress suite, 3,501 cases, real model in Node (~30 s)
 node scripts/ner-debug.mjs "text"   # what the model reads, its raw tokens, and the anonymized output
 npm run test:scenarios  # same package delivered through every channel in the real extension (also part of test:e2e)
 npm run lint        # ESLint (flat config; content scripts are classic scripts)
+npm run it-bundle   # IT handoff folder + zip (extension zip, staff guide PDF, IT guide PDF); run after package
 npm run package     # release zip in dist/, reproducible (EXTENSION_PATH=<unzipped> npm run test:e2e to check it)
 node scripts/extract-zip.mjs <dir>   # extract the release zip (any OS)
 python3 scripts/make-icons.py   # regenerate icons/

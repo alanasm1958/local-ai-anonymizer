@@ -429,6 +429,20 @@ test('built-in model is the default and loads from the bundled files', async () 
   assert.equal(ollama.requests.length, 0, 'Ollama should not be used by default');
 });
 
+test('popup "How to use" opens the guide; an unpacked install opens no tab by itself', async () => {
+  const opened = context.pages().map((p) => p.url());
+  assert.ok(!opened.some((url) => url.includes('src/help/help.html')), 'development installs must not auto-open the guide');
+
+  const popup = await context.newPage();
+  await popup.goto(extensionUrl('src/popup/popup.html'));
+  const [guide] = await Promise.all([context.waitForEvent('page'), popup.click('#open-help')]);
+  await guide.waitForLoadState();
+  assert.ok(guide.url().endsWith('src/help/help.html'));
+  assert.equal(await guide.textContent('h1'), 'How to use Local AI Anonymizer');
+  await guide.close();
+  await popup.close();
+});
+
 test('worker restores placeholders from the session vault', async () => {
   const restored = await worker.evaluate(async () => {
     const { vault } = await chrome.storage.session.get('vault');
